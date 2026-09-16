@@ -1,7 +1,7 @@
 import argparse, sys, os
 import json
-from .pmtiles.reader import Reader, MmapSource, all_tiles
-from .pmtiles.tile import TileType
+from .reader import Reader, MmapSource, all_tiles
+from .tile import TileType
 import sqlite3
 from tqdm import tqdm
 import logging

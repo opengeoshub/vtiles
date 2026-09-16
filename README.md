@@ -76,28 +76,50 @@ Ex: `> mbtilesdelduplicate tiles.mbtiles -o tiles_clean.mbtiles`
   Ex: `> geojson2mbtiles  state.geojson district.geojson -z9 -o state_district.mbtiles -t /usr/local/bin/ --extra-args coalesce-densest-as-needed` (on Linux)
 
 #### folder2s3
-- Uplpad a vector/ raster tiles folder to Amazon S3 Bucket:  
+- Upload a vector/raster tiles folder to Amazon S3 or S3-compatible storage (e.g. Cloudflare R2):
   ``` bash 
-  > folder2s3  <input_folder> -format <'pbf', 'mvt', 'png', 'jpg', 'jpeg', 'webp'>
+  > folder2s3  <input_folder> -format <'pbf', 'mvt', 'png', 'jpg', 'jpeg', 'webp'> [-v]
   ```
-  Ex: `> folder2s3  vectortiles_folder -format pbf`
+  Ex: `> folder2s3  vectortiles_folder -format pbf -v`
  
   Input S3 parameters:
 
   ```bash
   > S3 Bucket name: <Your S3 Bucket name (required)>
   > S3 Prefix: [Your S3 prefix (Optional. Press Enter to upload to the bucket root folder)]
+  > S3 endpoint URL: [Press Enter for AWS S3; for Cloudflare R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com]
   > AWS Access Key ID: <Your_Access_Key_ID (required)>
   > AWS Secret Access Key: <Your_Secrect_Access_Key (required)>
-  > AWS Region: <AWS region (Optional. Press Enter to choose default region)>
+  > AWS Region: [AWS region, or auto for Cloudflare R2]
+  ```
+
+#### pmtiles2s3
+- Upload a PMTiles file to Amazon S3 or S3-compatible storage (e.g. Cloudflare R2). Uses multipart upload for large files:
+  ``` bash
+  > pmtiles2s3 <input.pmtiles> [-v]
+  ```
+  Ex: `> pmtiles2s3 vietnam.pmtiles -v`
+
+  Input S3 parameters (same prompts as `folder2s3`):
+
+  ```bash
+  > S3 Bucket name: <Your S3 Bucket name (required)>
+  > S3 Prefix: [Optional; file is uploaded as <prefix>/<filename>.pmtiles]
+  > S3 endpoint URL: [Press Enter for AWS S3; for Cloudflare R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com]
+  > AWS Access Key ID: <Your_Access_Key_ID (required)>
+  > AWS Secret Access Key: <Your_Secret_Access_Key (required)>
+  > AWS Region: [AWS region, or auto for Cloudflare R2]
   ```
 
 #### mbtiles2s3
-- Uplpad a MBTiles file to Amazon S3 Bucket: Need to install aws cli and run aws configure to input credentials first
+- Upload a MBTiles file to Amazon S3 or S3-compatible storage (e.g. Cloudflare R2).
+  For AWS S3, install AWS CLI and run `aws configure` first, or pass credentials via flags.
   ``` bash 
-  > mbtiles2s3 <input file> <s3 bucket> -p (to see the uploading progress)
+  > mbtiles2s3 <input file> <s3://bucket/prefix> -p
+  > mbtiles2s3 <input file> <s3://bucket/prefix> -p --endpoint-url <R2_ENDPOINT> --access-key-id <KEY> --secret-access-key <SECRET> --region auto
   ```
-  Ex: `> mbtiles2s3 tiles.mbtiles s3://mybucket -p`
+  Ex (AWS): `> mbtiles2s3 tiles.mbtiles s3://mybucket/tiles -p`  
+  Ex (Cloudflare R2): `> mbtiles2s3 tiles.mbtiles s3://vietnam/vn -p --endpoint-url https://<ACCOUNT_ID>.r2.cloudflarestorage.com --access-key-id <R2_KEY> --secret-access-key <R2_SECRET> --region auto`
 - Install aws cli on Ubuntu:
   ``` bash 
   sudo apt update

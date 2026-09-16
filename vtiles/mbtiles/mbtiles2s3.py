@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-# Install aws cli and run aws configure to input credentials first and then:
-# python mbtiles2s3.py ../data/administrative.mbtiles s3://ss-vector-tile-data/sovereign/v20240410/administrative -p
+# Upload MBTiles to Amazon S3 or S3-compatible storage (e.g. Cloudflare R2).
+# Examples:
+#   mbtiles2s3 tiles.mbtiles s3://mybucket/prefix -p
+#   mbtiles2s3 tiles.mbtiles s3://vietnam/vn -p \
+#     --endpoint-url https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
+#     --access-key-id <R2_KEY> --secret-access-key <R2_SECRET> --region auto
 
 import json
 import logging
@@ -10,10 +14,9 @@ from functools import partial
 from multiprocessing.pool import ThreadPool
 from urllib.parse import urlparse
 
-import boto3
 import click
 
-# import utils
+from vtiles.mbtiles.s3client import create_s3_client
 
 upload_progress_interval = 100
 tile_count = 0
@@ -48,14 +51,18 @@ class MBTilesGenerator(object):
         return zoom, x, y, tile
 
 
-def get_tile_json(mbtiles, bucket, key_template):
+def get_tile_json(mbtiles, bucket, key_template, public_base_url=None):
     db = sqlite3.connect(mbtiles)
     cursor = db.cursor()
     cursor.execute("SELECT name, value FROM metadata")
+    if public_base_url:
+        tiles_url = "{}/{}/{}".format(public_base_url.rstrip("/"), bucket, key_template)
+    else:
+        tiles_url = "https://s3.amazonaws.com/{}/{}".format(bucket, key_template)
     tilejson = {
         "tilejson": "2.2.0",
         "scheme": "xyz",
-        "tiles": ["https://s3.amazonaws.com/{}/{}".format(bucket, key_template)],
+        "tiles": [tiles_url],
     }
     for key, value in cursor.fetchall():
         if key == "json":
@@ -75,14 +82,17 @@ def upload_tile(
 ):
     try:
         zoom, x, y, tile = tile_stuff
-        s3.put_object(
-            Body=tile,
-            Bucket=bucket,
-            Key=key_template.format(z=zoom, x=x, y=y),
-            ContentType=headers.get("Content-Type", ""),
-            ContentEncoding=headers.get("Content-Encoding", ""),
-            CacheControl=headers.get("Cache-Control", ""),
-        )
+        put_args = {
+            "Body": tile,
+            "Bucket": bucket,
+            "Key": key_template.format(z=zoom, x=x, y=y),
+            "ContentType": headers.get("Content-Type", ""),
+        }
+        if headers.get("Content-Encoding"):
+            put_args["ContentEncoding"] = headers["Content-Encoding"]
+        if headers.get("Cache-Control"):
+            put_args["CacheControl"] = headers["Cache-Control"]
+        s3.put_object(**put_args)
         global upload_count
         upload_count += 1
         if progress and upload_count % upload_progress_interval == 0:
@@ -113,14 +123,39 @@ def upload_tile(
     "--progress", "-p", default=False, is_flag=True, help="Show upload progress"
 )
 @click.option("--debug", "-d", default=False, help="Debug level logging", is_flag=True)
-
-def main(mbtiles, s3_url, threads, extension, header, progress, debug):
-    """Upload tiles from an MBTiles file to S3.
+@click.option(
+    "--endpoint-url",
+    default=None,
+    help="S3-compatible endpoint URL (for Cloudflare R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com)",
+)
+@click.option("--region", default=None, help="AWS region (use auto for Cloudflare R2)")
+@click.option("--access-key-id", default=None, help="Access key ID (R2 or AWS)")
+@click.option("--secret-access-key", default=None, help="Secret access key (R2 or AWS)")
+@click.option(
+    "--public-base-url",
+    default=None,
+    help="Public base URL for tile.json (e.g. https://tiles.example.com). Defaults to endpoint URL or AWS S3.",
+)
+def main(
+    mbtiles,
+    s3_url,
+    threads,
+    extension,
+    header,
+    progress,
+    debug,
+    endpoint_url,
+    region,
+    access_key_id,
+    secret_access_key,
+    public_base_url,
+):
+    """Upload tiles from an MBTiles file to S3 or S3-compatible storage (e.g. Cloudflare R2).
 
     \b
     PARAMS:
         mbtiles: Path to an MBTiles file
-        s3_url: url to an s3 bucket to upload tiles to
+        s3_url: url to an s3 bucket to upload tiles to, e.g. s3://bucket/prefix
     """
     logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
     logging.getLogger("botocore.credentials").setLevel(logging.getLevelName("ERROR"))
@@ -130,10 +165,29 @@ def main(mbtiles, s3_url, threads, extension, header, progress, debug):
     logging.getLogger("urllib3.connectionpool").setLevel(logging.getLevelName("ERROR"))
 
     base_url = urlparse(s3_url)
-
-    s3 = boto3.client("s3")
     bucket = base_url.netloc
     key_prefix = base_url.path.lstrip("/")
+
+    if endpoint_url:
+        logging.info(f"Using endpoint: {endpoint_url.strip().rstrip('/')}")
+
+    s3 = create_s3_client(
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        endpoint_url=endpoint_url,
+        aws_region=region,
+        max_pool_connections=max(threads, 10),
+    )
+
+    try:
+        s3.head_bucket(Bucket=bucket)
+    except Exception as e:
+        if endpoint_url and "SignatureDoesNotMatch" in str(e):
+            raise click.ClickException(
+                "SignatureDoesNotMatch: check R2 API token keys, endpoint "
+                "https://<ACCOUNT_ID>.r2.cloudflarestorage.com, and --region auto."
+            ) from e
+        raise click.ClickException(f"Cannot access bucket '{bucket}': {e}") from e
 
     headers = {}
     if header is not None:
@@ -147,7 +201,6 @@ def main(mbtiles, s3_url, threads, extension, header, progress, debug):
         headers.update(
             {
                 "Content-Encoding": "gzip",
-                "Content-Type": "application/vnd.mapbox-vector-tile",
                 "Content-Type": "application/x-protobuf",
             }
         )
@@ -170,14 +223,15 @@ def main(mbtiles, s3_url, threads, extension, header, progress, debug):
 
     tilejson_key = "{}/tile.json".format(key_prefix.strip("/"))
     logging.info(f"uploading tile.json to s3://{bucket}/{tilejson_key}")
-    tilejson_data = get_tile_json(mbtiles, bucket, key_template)
-    tilejson_json = json.dumps(tilejson_data, indent=4, sort_keys=True)
+    tile_public_base = public_base_url or endpoint_url
+    tilejson_data = get_tile_json(mbtiles, bucket, key_template, tile_public_base)
     s3.put_object(
-        Body=json.dumps(tilejson_data),
+        Body=json.dumps(tilejson_data, indent=4, sort_keys=True),
         Bucket=bucket,
         Key=tilejson_key,
         ContentType="application/json",
     )
+    logging.info("Upload done!")
 
 
 if __name__ == "__main__":

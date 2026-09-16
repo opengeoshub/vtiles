@@ -1,7 +1,7 @@
 import argparse
 import json
 import os,sys, logging
-from .pmtiles.reader import Reader, MmapSource, all_tiles  
+from .reader import Reader, MmapSource, all_tiles
 from tqdm import tqdm 
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')

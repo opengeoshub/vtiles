@@ -1,8 +1,8 @@
 # Generates a raster tile archive for conformance testing.
 
 from urllib.request import Request, urlopen
-from .pmtiles.tile import zxy_to_tileid, tileid_to_zxy, TileType, Compression
-from .pmtiles.writer import Writer
+from .tile import zxy_to_tileid, tileid_to_zxy, TileType, Compression
+from .writer import Writer
 
 acc = 0
 

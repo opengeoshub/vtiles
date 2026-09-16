@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vtiles"
-version = "1.0.8"
+version = "1.0.9"
 description = "Vector Tiles Utilities"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -67,9 +67,10 @@ servepmtiles = "vtiles.server.servepmtiles:main"
 tilesinspect = "vtiles.server.tilesinspect.tilesinspect:main"
 pmtilesinspect = "vtiles.server.pmtilesinspect.pmtilesinspect:main"
 
-pmtilesinfo = "vtiles.utils.pmtilesinfo:main"
-pmtiles2folder = "vtiles.utils.pmtiles2folder:main"
-pmtiles2mbtiles = "vtiles.utils.pmtiles2mbtiles:main"
+pmtilesinfo = "vtiles.pmtiles.pmtilesinfo:main"
+pmtiles2folder = "vtiles.pmtiles.pmtiles2folder:main"
+pmtiles2mbtiles = "vtiles.pmtiles.pmtiles2mbtiles:main"
+pmtiles2s3 = "vtiles.pmtiles.pmtiles2s3:main"
 vtpk2folder = "vtiles.utils.vtpk2folder:main"
 centerline = "vtiles.utils.centerline:main"
 

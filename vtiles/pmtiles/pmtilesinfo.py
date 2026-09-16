@@ -4,7 +4,7 @@ import pprint
 import requests
 from io import BytesIO
 from urllib.parse import urlparse
-from .pmtiles.reader import Reader, MmapSource
+from .reader import Reader, MmapSource
 
 def print_usage():
     print("Usage: pmtilesinfo PMTILES_FILE_OR_URL")

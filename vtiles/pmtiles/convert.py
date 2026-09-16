@@ -3,8 +3,8 @@ import gzip
 import json
 import os
 import sqlite3
-from pmtiles.writer import write
-from pmtiles.reader import Reader, MmapSource, all_tiles
+from .writer import write
+from .reader import Reader, MmapSource, all_tiles
 from .tile import zxy_to_tileid, tileid_to_zxy, TileType, Compression
 
 

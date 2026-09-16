@@ -1,7 +1,7 @@
 import argparse, sys, os
 import gzip
-from vtiles.utils.pmtiles.writer import write
-from vtiles.utils.pmtiles.tile import TileType, zxy_to_tileid, tileid_to_zxy, Compression
+from vtiles.pmtiles.writer import write
+from vtiles.pmtiles.tile import TileType, zxy_to_tileid, tileid_to_zxy, Compression
 import sqlite3
 from tqdm import tqdm
 import logging
