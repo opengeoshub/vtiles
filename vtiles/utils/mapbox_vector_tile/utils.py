@@ -44,6 +44,7 @@ DEFAULT_ENCODE_OPTIONS = {
     "on_invalid_geometry": None,
     "check_winding_order": True,
     "max_geometry_validate_tries": 5,
+    "allow_null_geometry": False,
 }
 
 DEFAULT_DECODE_OPTIONS = {"y_coord_down": False, "transformer": None, "geojson": True}

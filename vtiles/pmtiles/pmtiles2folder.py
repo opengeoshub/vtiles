@@ -7,7 +7,7 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
-def pmtiles_to_folder(input_file, output_folder, verbose=False):   
+def pmtiles_to_folder(input_file, output_folder, verbose=True):   
     with open(input_file, "r+b") as f:
         source = MmapSource(f)
         reader = Reader(source)
@@ -32,7 +32,7 @@ def main():
     parser = argparse.ArgumentParser(description='Convert PMTiles to tiles folder')
     parser.add_argument('input', help='Input PMTiles file path')
     parser.add_argument('-o', '--output',help='Output directory path')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     args = parser.parse_args()
 
     if not os.path.exists(args.input):

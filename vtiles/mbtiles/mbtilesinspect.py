@@ -11,7 +11,7 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def inspect_mbtiles(mbtiles, verbose=False):
+def inspect_mbtiles(mbtiles, verbose=True):
     is_vector, compression_type = check_vector(mbtiles) 
     tile_format = determine_tileformat(mbtiles)
     min_zoom, max_zoom = get_zoom_levels(mbtiles)
@@ -74,7 +74,7 @@ def process_tile_batch(tile_batch):
     return layers
 
 # Function to process all zoom levels in parallel and accumulate results
-def list_layers_for_all_zoom_levels_parallel(mbtiles_file, batch_size=10000, workers=4, verbose=False):
+def list_layers_for_all_zoom_levels_parallel(mbtiles_file, batch_size=10000, workers=4, verbose=True):
     # Connect to the MBTiles file (SQLite database)
     conn = sqlite3.connect(mbtiles_file)
     cursor = conn.cursor()
@@ -129,7 +129,7 @@ def list_layers_for_all_zoom_levels_parallel(mbtiles_file, batch_size=10000, wor
 def main():
     parser = argparse.ArgumentParser(description='Inspect MBTiles file with analyzing tile_data in tiles table.')
     parser.add_argument('input', help='Path to the MBTiles file.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
     mbtiles = args.input

@@ -9,7 +9,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def pmtiles_to_mbtiles(input, output, verbose=False):
+def pmtiles_to_mbtiles(input, output, verbose=True):
     conn = sqlite3.connect(output)
     cursor = conn.cursor()
     cursor.execute("CREATE TABLE metadata (name text, value text);")
@@ -78,7 +78,7 @@ def main():
     parser = argparse.ArgumentParser(description='Convert PMTiles to MBTiles.')
     parser.add_argument('input', help='Path to the input PMTiles file.')
     parser.add_argument('-o', '--output', help='Path to the output MBTiles file.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     
     args = parser.parse_args()
     if not os.path.exists(args.input):

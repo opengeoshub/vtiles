@@ -263,3 +263,9 @@ Ex: `> mbtilesdelduplicate tiles.mbtiles -o tiles_clean.mbtiles`
     ``` bash 
     > pmtiles2mbtiles  <input PMTiles> -o <output MBTiles>
     ```
+#### h3parquet2pmtiles
+- Convert a Parquet file of H3 cells to PMTiles. The `h3` column is decoded to a hexagon only to match each row against XYZ tiles; the output stores attributes (`h3`, `population`, …) and does **not** write geometry.
+    ``` bash
+    > h3parquet2pmtiles <input.parquet> -o [output.pmtiles] -z [maxzoom, default 5] --minzoom [default 0] --h3 [h3 column] --layer [layer name]
+    ```
+  Ex: `> h3parquet2pmtiles h3_4.parquet -o h3_4.pmtiles -z 8`

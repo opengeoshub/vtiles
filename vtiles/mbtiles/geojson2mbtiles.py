@@ -164,7 +164,7 @@ def main():
     parser.add_argument('-z', '--zoom', type=int, default=0, help="Zoom level for the tile.")
     parser.add_argument('-x', '--x', type=int, default=0, help="Tile column.")
     parser.add_argument('-y', '--y', type=int, default=0, help="Tile row.")
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     
     args = parser.parse_args()
     if not os.path.exists(args.input):

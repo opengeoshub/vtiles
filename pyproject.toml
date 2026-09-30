@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vtiles"
-version = "1.0.9"
+version = "1.0.10"
 description = "Vector Tiles Utilities"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,9 @@ dependencies = [
     "protobuf~=7.36.1",
     "pillow~=12.3.0",
     "pyclipper~=1.4.0",
+    "pyarrow>=14",
+    "h3>=4",
+    "geoparquet-io>=0.4.0",
 ]
 
 [project.scripts]
@@ -71,8 +74,10 @@ pmtilesinfo = "vtiles.pmtiles.pmtilesinfo:main"
 pmtiles2folder = "vtiles.pmtiles.pmtiles2folder:main"
 pmtiles2mbtiles = "vtiles.pmtiles.pmtiles2mbtiles:main"
 pmtiles2s3 = "vtiles.pmtiles.pmtiles2s3:main"
+h3parquet2pmtiles = "vtiles.pmtiles.h3parquet2pmtiles:main"
 vtpk2folder = "vtiles.utils.vtpk2folder:main"
 centerline = "vtiles.utils.centerline:main"
+file2s3 = "vtiles.utils.file2s3:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vtiles"]

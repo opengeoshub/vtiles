@@ -42,7 +42,7 @@ def get_max_zoom(mbtiles):
         cursor.close()
         conn.close()
 
-def convert_mbtiles_to_folder(mbtiles, output_folder, flipy, min_zoom=0, max_zoom=None, verbose=False):
+def convert_mbtiles_to_folder(mbtiles, output_folder, flipy, min_zoom=0, max_zoom=None, verbose=True):
     conn = sqlite3.connect(mbtiles)
     cursor = conn.cursor()
     
@@ -88,7 +88,7 @@ def main():
     parser.add_argument('-flipy', type=int, default=0, choices=[0, 1], help='TMS <--> XYZ tiling scheme (optional): 1 or 0, default is 0')
     parser.add_argument('-minzoom', type=int, default=0, help='Min zoom to export (optional, default is 0)')
     parser.add_argument('-maxzoom', type=int, default=None, help='Max zoom to export (optional, default is the maxzoom of the input MBTiles)')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
 

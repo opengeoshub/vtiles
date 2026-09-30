@@ -207,7 +207,7 @@ def get_center_of_bound(bounds_str):
         logging.error(f"Get center of bound error: {e}")
         return ''
         
-def merge_mbtiles(input_mbtiles, output_mbtiles, verbose=False):   
+def merge_mbtiles(input_mbtiles, output_mbtiles, verbose=True):   
     is_vector, compression_type = check_vector(input_mbtiles[0]) 
     if is_vector:
         fix_vectormetadata(input_mbtiles[0], compression_type,'', verbose)   
@@ -358,7 +358,7 @@ def main():
     parser = argparse.ArgumentParser(description="Merge multiple vector MBTiles files into a single MBTiles file.")
     parser.add_argument('input', nargs='+', help='Paths to the input MBTiles files to merge.')
     parser.add_argument('-o', '--output', help='Output merged MBTiles file. Defaults to "merged.mbtiles" in the current directory.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
     for file in args.input:

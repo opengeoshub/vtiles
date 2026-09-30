@@ -43,7 +43,7 @@ def get_dirs(path):
   return [name for name in os.listdir(path)
     if os.path.isdir(os.path.join(path, name))]
 
-def folder2mbtiles(input_folder, mbtiles_file, flipy=0, verbose=False):
+def folder2mbtiles(input_folder, mbtiles_file, flipy=0, verbose=True):
   # logger.debug("%s --> %s" % (input_folder, mbtiles_file))
   con = mbtiles_connect(mbtiles_file)
   cur = con.cursor()
@@ -104,7 +104,7 @@ def main():
   parser.add_argument('input', help='Input folder')
   parser.add_argument('-o','--output', default=None, help='Output mbtiles file name (optional)')
   parser.add_argument('-flipy', type=int, default=0,choices=[0, 1], help='TMS <--> XYZ tiling scheme (optional): 1 or 0, default is 0')
-  parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+  parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
   args = parser.parse_args()
 

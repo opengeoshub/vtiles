@@ -8,7 +8,7 @@ from vtiles.utils.geopreocessing import safe_makedir
 
 logger = logging.getLogger(__name__)
 
-def flip_y(inDIR, copyDIR, verbose=False):
+def flip_y(inDIR, copyDIR, verbose=True):
     # Copy all files from the root of inDIR to the root of copyDIR, including metadata.json
     root_files = [f for f in os.listdir(inDIR) if os.path.isfile(os.path.join(inDIR, f))]
     for root_file in tqdm(root_files, desc="Copying metadata (if existed)", unit=' ', ncols=80, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{percentage:.0f}%]', disable=not verbose):
@@ -49,7 +49,7 @@ def main():
     parser = argparse.ArgumentParser(description='Convert TMS <--> XYZ tiling scheme for a tiles folder')
     parser.add_argument('input', help='Input folder containing tiles')
     parser.add_argument('-o', '--output', default=None, help='Output folder (optional)')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     args = parser.parse_args()
 
     # Validate input folder

@@ -52,7 +52,7 @@ def mbtiles_to_header_json(mbtiles_metadata):
 
     return header, mbtiles_metadata
 
-def mbtiles_to_pmtiles(input, output, verbose=False):
+def mbtiles_to_pmtiles(input, output, verbose=True):
     try: 
         conn = sqlite3.connect(input)
         cursor = conn.cursor()
@@ -109,7 +109,7 @@ def main():
     parser = argparse.ArgumentParser(description='Convert MBTiles to PMTiles.')
     parser.add_argument('input', help='Path to the input MBTiles file.')
     parser.add_argument('-o', '--output', help='Path to the output PMTiles file.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     
     args = parser.parse_args()
     if not os.path.exists(args.input):

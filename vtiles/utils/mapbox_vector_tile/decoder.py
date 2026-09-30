@@ -194,4 +194,5 @@ class TileData:
                 return {"type": "MultiPolygon", "coordinates": polygons}
 
         else:
-            raise ValueError(f"Unknown geometry type: {ftype}")
+            # GeomType.Unknown / attribute-only features have no geometry
+            return None

@@ -33,6 +33,14 @@ class Feature:
         return self.obj['properties']
 
     def toGeoJSON(self):
+        geom = self.obj.get('geometry')
+        if geom is None:
+            return {
+                "type": "Feature",
+                "geometry": None,
+                "properties": self.properties
+            }
+
         size = self.extent * 2 ** self.z
         x0 = self.extent * self.x
         y0 = self.extent * self.y

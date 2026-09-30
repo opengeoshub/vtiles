@@ -1,4 +1,4 @@
-"""Upload a PMTiles file to Amazon S3 or S3-compatible storage (e.g. Cloudflare R2)."""
+"""Upload a file to Amazon S3 or S3-compatible storage (e.g. Cloudflare R2)."""
 
 import argparse
 import logging
@@ -12,8 +12,11 @@ from vtiles.mbtiles.s3client import create_s3_client
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PMTILES_CONTENT_TYPE = "application/vnd.pmtiles"
-# Multipart parts of 64 MiB work well for large PMTiles on R2/S3.
+CONTENT_TYPES = {
+    ".parquet": "application/vnd.apache.parquet",
+    ".pmtiles": "application/vnd.pmtiles",
+    ".mbtiles": "application/vnd.sqlite3",
+}
 DEFAULT_MULTIPART_THRESHOLD = 64 * 1024 * 1024
 DEFAULT_MULTIPART_CHUNKSIZE = 64 * 1024 * 1024
 
@@ -39,7 +42,15 @@ def build_s3_key(s3_prefix, filename):
     return f"{prefix}/{name}"
 
 
-def pmtiles2s3(
+def content_type_for(filename):
+    lower = filename.lower()
+    for suffix, content_type in CONTENT_TYPES.items():
+        if lower.endswith(suffix):
+            return content_type
+    return "application/octet-stream"
+
+
+def file2s3(
     input_file,
     bucket_name="",
     s3_prefix="",
@@ -80,7 +91,7 @@ def pmtiles2s3(
         max_concurrency=4,
         use_threads=True,
     )
-    extra_args = {"ContentType": PMTILES_CONTENT_TYPE}
+    extra_args = {"ContentType": content_type_for(input_file)}
 
     try:
         size_mb = file_size / (1024 * 1024)
@@ -114,12 +125,17 @@ def pmtiles2s3(
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Upload a PMTiles file to S3 or S3-compatible storage "
-            "(e.g. Cloudflare R2)."
+            "Upload a file to S3 or S3-compatible storage (e.g. Cloudflare R2)."
         )
     )
-    parser.add_argument("input", type=str, help="Path to the .pmtiles file to upload.")
-    parser.add_argument("-v", "--verbose", action=argparse.BooleanOptionalAction, default=True, help="Show progress bar")
+    parser.add_argument("input", type=str, help="Path to the file to upload.")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Show progress bar",
+    )
     args = parser.parse_args()
 
     input_file = args.input
@@ -127,10 +143,6 @@ def main():
         logging.error(
             "Input file does not exist or is invalid. Please recheck and provide a correct one."
         )
-        raise SystemExit(1)
-
-    if not input_file.lower().endswith(".pmtiles"):
-        logging.error("Input must be a .pmtiles file.")
         raise SystemExit(1)
 
     input_file_abspath = os.path.abspath(input_file)
@@ -170,7 +182,7 @@ def main():
     if not aws_region:
         aws_region = "auto" if endpoint_url else None
 
-    ok = pmtiles2s3(
+    ok = file2s3(
         input_file_abspath,
         s3_bucket_name,
         s3_prefix,

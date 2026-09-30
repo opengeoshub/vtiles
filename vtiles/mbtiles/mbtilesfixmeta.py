@@ -55,7 +55,7 @@ def merge_layer_dicts(layers_accumulated, new_layers):
             layers_accumulated[name]['minzoom'] = min(layers_accumulated[name]['minzoom'], layer['minzoom'])
             layers_accumulated[name]['maxzoom'] = max(layers_accumulated[name]['maxzoom'], layer['maxzoom'])
 
-def get_layers_from_all_tiles_parallel(mbtiles_file, batch_size=10000, workers=4, verbose=False):
+def get_layers_from_all_tiles_parallel(mbtiles_file, batch_size=10000, workers=4, verbose=True):
     """Extract layer information from all tiles in the MBTiles file."""
     conn = sqlite3.connect(mbtiles_file)
     cursor = conn.cursor()
@@ -104,7 +104,7 @@ def get_layers_from_all_tiles_parallel(mbtiles_file, batch_size=10000, workers=4
         })
     return json_output
 
-def fix_vectormetadata(input_mbtiles, compression_type, desc, verbose=False):
+def fix_vectormetadata(input_mbtiles, compression_type, desc, verbose=True):
     conn = sqlite3.connect(input_mbtiles)       
     cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS metadata (name TEXT, value TEXT);')
@@ -180,7 +180,7 @@ def fix_rastermetadata(input_mbtiles, format,desc):
 def main():
     parser = argparse.ArgumentParser(description='Create or update metadata for an existing MBTiles file.')
     parser.add_argument('input', help='Path to the MBTiles file.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     args = parser.parse_args()
     input_mbtiles = args.input
     

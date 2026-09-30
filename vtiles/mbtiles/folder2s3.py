@@ -30,7 +30,7 @@ def upload_file(bucket_name, local_file_path, s3_key, content_type=None, content
         logging.error(f"Error uploading {local_file_path} to {s3_key}: {e}")
         return False
 
-def upload_files(bucket_name, input_folder, s3_prefix='', content_type=None, content_encoding=None, verbose=False, max_workers=None):
+def upload_files(bucket_name, input_folder, s3_prefix='', content_type=None, content_encoding=None, verbose=True, max_workers=None):
     total_files = sum(len(files) for _, _, files in os.walk(input_folder))
     if max_workers is None:
         max_workers = min(multiprocessing.cpu_count() * 2, 10)
@@ -50,7 +50,7 @@ def upload_files(bucket_name, input_folder, s3_prefix='', content_type=None, con
             for future in futures:
                 future.result()
 
-def folder2s3(input_folder, format='', bucket_name='', s3_prefix='', aws_access_key_id=None, aws_secret_access_key=None, aws_region=None, endpoint_url=None, verbose=False):
+def folder2s3(input_folder, format='', bucket_name='', s3_prefix='', aws_access_key_id=None, aws_secret_access_key=None, aws_region=None, endpoint_url=None, verbose=True):
     max_workers = min(multiprocessing.cpu_count() * 2, 10)
 
     try:
@@ -91,7 +91,7 @@ def main():
     parser = argparse.ArgumentParser(description='Upload a tiles folder to S3 or S3-compatible storage (e.g. Cloudflare R2).')
     parser.add_argument('input', type=str, help='The tiles folder to upload.')
     parser.add_argument('-format', type=str, required=True, choices=['pbf', 'mvt', 'png', 'jpg', 'jpeg', 'webp'], help='format of the files to upload.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
     args = parser.parse_args()
 
     input_folder = args.input

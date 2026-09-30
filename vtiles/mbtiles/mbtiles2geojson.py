@@ -54,7 +54,7 @@ def merge_geojsons(geojson_list):
     
     return merged_geojson
 
-def mbtiles_to_geojson(input_mbtiles, output_geojson, compression_type, zoom_level, flip_y, layers, chunk_size=1000, verbose=False):
+def mbtiles_to_geojson(input_mbtiles, output_geojson, compression_type, zoom_level, flip_y, layers, chunk_size=1000, verbose=True):
     """
     Convert MBTiles data to GeoJSON format in chunks.
 
@@ -128,7 +128,7 @@ def main():
     parser.add_argument('-z','--zoom', type=int, required=True, help='Minimum tile zoom level')
     parser.add_argument('-flipy', '--flipy', type=int, choices=[0, 1], default=0, help='TMS <--> XYZ tiling scheme (optional): 1 or 0, default is 0')
     parser.add_argument('-l', '--layers', type=str, nargs='*', help='List of layer names to convert')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
     if not os.path.exists(args.input):

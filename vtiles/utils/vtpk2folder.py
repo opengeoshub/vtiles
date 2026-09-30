@@ -6,7 +6,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def extract_vtpk(vtpk_path, output_dir, verbose=False):
+def extract_vtpk(vtpk_path, output_dir, verbose=True):
     # Open the VTPK file
     with zipfile.ZipFile(vtpk_path, 'r') as zip_ref:
         # Get the list of files in the archive
@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description='Extract VTPK (Vector Tile Package) to folder')
     parser.add_argument('input', help='Path to the input VTPK file')
     parser.add_argument('-o', '--output', help='Path to the output directory')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
 

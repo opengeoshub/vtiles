@@ -59,9 +59,11 @@ class VectorTile:
         self.seen_values_bool_idx = {}
 
         for feature in features:
-            # skip missing or empty geometries
+            # skip missing or empty geometries unless attribute-only features are allowed
             geometry_spec = feature.get("geometry")
             if geometry_spec is None:
+                if self.layer_options["allow_null_geometry"]:
+                    self.add_attribute_only_feature(feature)
                 continue
             shape = self._load_geometry(geometry_spec)
 
@@ -187,6 +189,19 @@ class VectorTile:
             return geom
         else:
             return transform(self.layer_options["transformer"], geom)
+
+    def add_attribute_only_feature(self, feature):
+        f = self.layer.features.add()
+
+        fid = feature.get("id")
+        if fid is not None and isinstance(fid, Number) and fid >= 0:
+            f.id = fid
+
+        properties = feature.get("properties")
+        if properties is not None:
+            self._handle_attr(self.layer, f, properties)
+
+        f.type = self.tile.Unknown
 
     def add_feature(self, feature, shape):
         geom_encoder = GeometryEncoder(self.layer_options["y_coord_down"], self.layer_options["extents"])

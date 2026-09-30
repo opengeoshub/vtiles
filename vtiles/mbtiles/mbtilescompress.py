@@ -20,7 +20,7 @@ def compress_tile_data(tile_data):
         return tile_data
     return tile_data          
 
-def compress_mbtiles(input_mbtiles, output_mbtiles, batch_size=10000, verbose=False):
+def compress_mbtiles(input_mbtiles, output_mbtiles, batch_size=10000, verbose=True):
     shutil.copyfile(input_mbtiles, output_mbtiles)
     
     # Open the copied MBTiles file
@@ -110,7 +110,7 @@ def main():
     parser = argparse.ArgumentParser(description='Compress Vector MBTiles file with GZIP.')
     parser.add_argument('input', help='Path to the input MBTiles file.')
     parser.add_argument('-o', '--output', help='Path to the output MBTiles file.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
     if not os.path.exists(args.input):

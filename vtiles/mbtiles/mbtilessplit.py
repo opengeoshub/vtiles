@@ -34,7 +34,7 @@ def process_metadata(metadata_json, layers_to_keep, exclude=False):
     return metadata_json
 
 
-def process_mbtiles(input_mbtiles, output_mbtiles, layers_to_keep, keep_layers=True, verbose=False):
+def process_mbtiles(input_mbtiles, output_mbtiles, layers_to_keep, keep_layers=True, verbose=True):
     is_vector, compression_type = check_vector(input_mbtiles) 
     desc = 'Update metadata by vtiles.mbtiles.mbtilesfixmeta' 
     if is_vector:
@@ -124,7 +124,7 @@ def main():
     parser.add_argument('input', help='Path to the input MBTiles file.')
     parser.add_argument('-o', '--output', help='Path to the output splitted MBTiles file.')
     parser.add_argument("-l", "--layers", nargs='+', required=True, help="List of layer names to be splitted")
-    parser.add_argument('-v', '--verbose', action='store_true', help='Show progress bar')
+    parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, default=True, help='Show progress bar')
 
     args = parser.parse_args()
     if not os.path.exists(args.input):
