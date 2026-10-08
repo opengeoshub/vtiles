@@ -17,3 +17,10 @@ dist/
 build/
 vtiles.egg-info/
 vtiles/server/pmtilesinspect/vietnam.pmtiles
+*.mbtiles
+*.pbf
+*.exe
+vietnam.geojson
+vietnam.qmd
+*.pmtiles
+*.qmd
