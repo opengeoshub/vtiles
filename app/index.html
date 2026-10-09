@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VTPK Map Viewer</title>
+
+  <link
+    href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css"
+    rel="stylesheet"
+  >
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel-bg: #202124;
+      --panel-border: #414449;
+      --text: #f1f3f4;
+      --muted: #aeb4bc;
+      --accent: #4c9ffe;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: #17181a;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #toolbar {
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+    .title-group {
+      display: flex;
+      align-items: center;
+      margin-right: 8px;
+    }
+
+    .app-title {
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    button,
+    .file-button,
+    input[type="text"] {
+      min-height: 34px;
+      border: 1px solid #50545b;
+      border-radius: 5px;
+      background: #303238;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    button,
+    .file-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button:hover:not(:disabled),
+    .file-button:hover {
+      background: #41454d;
+      border-color: #777d87;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    input[type="text"] {
+      width: 230px;
+      padding: 7px 9px;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .toolbar-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 30px;
+      font-size: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .toolbar-check input {
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    #status {
+      flex: 1 1 100%;
+      min-height: 15px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    #map {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+    }
+
+    .maplibregl-ctrl-group {
+      overflow: hidden;
+      border: 1px solid #4a4d52 !important;
+      border-radius: 5px !important;
+      background: #202124 !important;
+    }
+
+    .maplibregl-ctrl-group button {
+      background-color: #202124 !important;
+    }
+
+    .maplibregl-ctrl-group button:hover {
+      background-color: #393b40 !important;
+    }
+
+    .maplibregl-ctrl button .maplibregl-ctrl-icon {
+      filter: invert(1);
+    }
+
+    .maplibregl-ctrl-top-right {
+      top: 0;
+      right: 0;
+    }
+
+
+    .maplibregl-popup-content {
+      max-width: 320px;
+      max-height: 280px;
+      overflow: auto;
+      color: #202124;
+      font-size: 12px;
+    }
+
+    .popup-title {
+      margin-bottom: 7px;
+      font-weight: 700;
+    }
+
+    .popup-row {
+      margin: 4px 0;
+      overflow-wrap: anywhere;
+    }
+
+    .popup-key {
+      font-weight: 700;
+    }
+
+    @media (max-width: 700px) {
+      #toolbar {
+        gap: 6px;
+        padding: 8px;
+      }
+
+      .app-title {
+        font-size: 14px;
+      }
+
+      input[type="text"] {
+        flex: 1 1 140px;
+        width: auto;
+        min-width: 120px;
+      }
+
+    }
+
+    @media (max-width: 380px) {
+      .title-group {
+        flex-basis: 100%;
+      }
+
+    }
+  </style>
+</head>
+
+<body>
+  <header id="toolbar">
+    <div class="title-group">
+      <span class="app-title">VTPK Map Viewer</span>
+    </div>
+
+    <label class="file-button" for="fileInput">
+      Open local VTPK / TPKX
+    </label>
+    <input
+      id="fileInput"
+      type="file"
+      accept=".vtpk,.tpkx,.sanfrancisco.tpkx"
+    >
+
+    <input
+      id="remoteUrl"
+      type="text"
+      placeholder="Remote VTPK / TPKX URL..."
+      aria-label="Remote VTPK / TPKX URL"
+    >
+    <button id="openUrlBtn" type="button">Open URL</button>
+
+    <button id="fitBoundsBtn" type="button" disabled>
+      Fit bounds
+    </button>
+
+    <button id="clearBtn" type="button" disabled>
+      Clear
+    </button>
+
+
+    <label class="toolbar-check" title="Show or hide the background basemap">
+      <input id="backgroundToggle" type="checkbox" checked>
+      Background
+    </label>
+
+    <label class="toolbar-check" title="Show tile boundaries">
+      <input id="tileBoundaryToggle" type="checkbox">
+      Tile boundaries
+    </label>
+
+    <div id="status" role="status" aria-live="polite">
+      Ready. Load a local or remote VTPK / TPKX.
+    </div>
+  </header>
+
+  <main id="map">
+  </main>
+
+  <script type="module">
+    import maplibregl from
+      "https://esm.sh/maplibre-gl@5.13.0";
+
+    import {
+      Protocol,
+      FileSource,
+      TilePackage
+    } from
+      "https://esm.sh/maplibre-tilepackage-protocol@1.2.1";
+
+    const $ = (id) => document.getElementById(id);
+
+    const statusEl = $("status");
+    const fileInput = $("fileInput");
+    const remoteUrlInput = $("remoteUrl");
+    const openUrlBtn = $("openUrlBtn");
+    const fitBoundsBtn = $("fitBoundsBtn");
+    const clearBtn = $("clearBtn");
+    const backgroundToggle = $("backgroundToggle");
+    const tileBoundaryToggle = $("tileBoundaryToggle");
+
+    const ESRI_SOURCE_ID = "esri-background";
+    const ESRI_LAYER_ID = "esri-background-layer";
+
+    const ESRI_TILES =
+      "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+
+    const EMPTY_STYLE = {
+      version: 8,
+      sources: {},
+      layers: []
+    };
+
+    const protocol = new Protocol();
+    maplibregl.addProtocol("tilepackage", protocol.package);
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: {
+        version: 8,
+        sources: {
+          [ESRI_SOURCE_ID]: {
+            type: "raster",
+            tiles: [ESRI_TILES],
+            tileSize: 256,
+            attribution: "ESRI"
+          }
+        },
+        layers: [
+          {
+            id: ESRI_LAYER_ID,
+            type: "raster",
+            source: ESRI_SOURCE_ID
+          }
+        ]
+      },
+      center: [0, 0],
+      zoom: 0,
+      hash: false
+    });
+
+    map.addControl(
+      new maplibregl.NavigationControl(),
+      "top-right"
+    );
+
+    map.addControl(
+      new maplibregl.FullscreenControl(),
+      "top-right"
+    );
+
+    let currentPackage = null;
+    let currentPackageStyle = null;
+    let currentOriginalStyle = null;
+    let currentPackageName = "";
+    let currentHeader = null;
+    let loadSequence = 0;
+    let styleSequence = 0;
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+
+    function makeCompositeStyle(packageStyle) {
+      const style = structuredClone(packageStyle || EMPTY_STYLE);
+
+      style.sources = { ...(style.sources || {}) };
+      style.layers = [...(style.layers || [])];
+
+      // The Esri basemap is managed by the viewer, not the VTPK.
+      delete style.sources[ESRI_SOURCE_ID];
+      style.layers = style.layers.filter(
+        layer => layer.id !== ESRI_LAYER_ID
+      );
+
+      if (backgroundToggle.checked) {
+        style.sources[ESRI_SOURCE_ID] = {
+          type: "raster",
+          tiles: [ESRI_TILES],
+          tileSize: 256,
+          attribution: "ESRI"
+        };
+
+        // Put the basemap below all package layers.
+        style.layers.unshift({
+          id: ESRI_LAYER_ID,
+          type: "raster",
+          source: ESRI_SOURCE_ID
+        });
+      }
+
+      return style;
+    }
+
+
+    function parseBoundsValues(bounds) {
+      if (!bounds) return null;
+
+      if (typeof bounds === "string") {
+        const numbers = bounds
+          .split(/[,\s]+/)
+          .map(Number);
+
+        if (numbers.length >= 4 && numbers.slice(0, 4).every(Number.isFinite)) {
+          return numbers.slice(0, 4);
+        }
+
+        return null;
+      }
+
+      if (Array.isArray(bounds) && bounds.length >= 4) {
+        const values = bounds.slice(0, 4).map(Number);
+        return values.every(Number.isFinite) ? values : null;
+      }
+
+      if (typeof bounds === "object") {
+        const west = bounds.west ?? bounds.xmin ?? bounds.minX;
+        const south = bounds.south ?? bounds.ymin ?? bounds.minY;
+        const east = bounds.east ?? bounds.xmax ?? bounds.maxX;
+        const north = bounds.north ?? bounds.ymax ?? bounds.maxY;
+
+        if ([west, south, east, north].every(v => v !== undefined && Number.isFinite(Number(v)))) {
+          return [Number(west), Number(south), Number(east), Number(north)];
+        }
+      }
+
+      return null;
+    }
+
+    function isValidLonLatBounds(bounds) {
+      if (!bounds || bounds.length !== 4) return false;
+
+      const [west, south, east, north] = bounds;
+
+      return [west, south, east, north].every(Number.isFinite) &&
+        west >= -180 && west <= 180 &&
+        east >= -180 && east <= 180 &&
+        south >= -90 && south <= 90 &&
+        north >= -90 && north <= 90 &&
+        west <= east &&
+        south <= north;
+    }
+
+    function webMercatorToLonLat(x, y) {
+      const radius = 6378137;
+
+      const lon = (x / radius) * (180 / Math.PI);
+      const lat = (
+        2 * Math.atan(Math.exp(y / radius)) -
+        Math.PI / 2
+      ) * (180 / Math.PI);
+
+      return [lon, lat];
+    }
+
+    function getPackageBounds() {
+      const candidates = [
+        currentHeader?.initialExtent,
+        currentHeader?.fullExtent,
+        currentHeader?.extent,
+        currentOriginalStyle?.metadata?.["mapbox:bounds"],
+        currentOriginalStyle?.metadata?.bounds,
+        currentOriginalStyle?.bounds
+      ];
+
+      for (const candidate of candidates) {
+        const bounds = parseBoundsValues(candidate);
+        if (!bounds) continue;
+
+        if (isValidLonLatBounds(bounds)) {
+          return bounds;
+        }
+
+        const [xmin, ymin, xmax, ymax] = bounds;
+
+        // Web Mercator extent in meters.
+        const limit = 20037508.342789244;
+
+        if (
+          Math.abs(xmin) <= limit &&
+          Math.abs(xmax) <= limit &&
+          Math.abs(ymin) <= limit &&
+          Math.abs(ymax) <= limit
+        ) {
+          const southwest = webMercatorToLonLat(xmin, ymin);
+          const northeast = webMercatorToLonLat(xmax, ymax);
+
+          const converted = [
+            southwest[0],
+            southwest[1],
+            northeast[0],
+            northeast[1]
+          ];
+
+          if (isValidLonLatBounds(converted)) {
+            return converted;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function fitToBounds() {
+      const bounds = getPackageBounds();
+
+      if (bounds) {
+        map.fitBounds(
+          [
+            [bounds[0], bounds[1]],
+            [bounds[2], bounds[3]]
+          ],
+          {
+            padding: {
+              top: 50,
+              right: 50,
+              bottom: 50,
+              left: 50
+            },
+            maxZoom: 16,
+            duration: 700
+          }
+        );
+
+        return true;
+      }
+
+      const center = currentOriginalStyle?.center;
+      const zoom = currentOriginalStyle?.zoom;
+
+      if (
+        Array.isArray(center) &&
+        center.length >= 2 &&
+        center.every(Number.isFinite)
+      ) {
+        map.flyTo({
+          center,
+          zoom: Number.isFinite(zoom) ? zoom : 5,
+          duration: 700
+        });
+        return true;
+      }
+
+      setStatus("Package loaded, but no usable bounds were found.");
+      return false;
+    }
+
+    function setActiveStyle({ fit = false } = {}) {
+      if (!currentPackage) return;
+
+      const thisStyle = ++styleSequence;
+
+      currentPackageStyle = structuredClone(currentOriginalStyle);
+      map.setStyle(makeCompositeStyle(currentPackageStyle));
+
+      map.once("style.load", () => {
+        if (!currentPackage || thisStyle !== styleSequence) return;
+
+        if (tileBoundaryToggle.checked) {
+          map.showTileBoundaries = true;
+        }
+
+        setStatus(
+          `Loaded ${currentPackageName} — ` +
+          `${currentPackageStyle.layers?.length || 0} style layers.`
+        );
+
+        if (fit) fitToBounds();
+      });
+    }
+
+    async function loadPackage(pkg, name) {
+      const thisLoad = ++loadSequence;
+
+      setStatus(`Loading ${name}...`);
+      openUrlBtn.disabled = true;
+      clearBtn.disabled = true;
+      fitBoundsBtn.disabled = true;
+
+      try {
+        // Register the package with the tilepackage protocol.
+        await protocol.add(pkg);
+
+        if (thisLoad !== loadSequence) return;
+
+        const header = await pkg.getHeader();
+
+        if (thisLoad !== loadSequence) return;
+
+        const style = await pkg.getStyle();
+
+        if (thisLoad !== loadSequence) return;
+
+        if (!style || !Array.isArray(style.layers)) {
+          throw new Error("The VTPK does not contain a valid style.");
+        }
+
+        console.group("[VTPK Viewer] Package diagnostics");
+        console.log("Package:", name);
+        console.log("Header:", header);
+        console.log("Style:", style);
+        console.log("Style layer count:", style.layers.length);
+        console.table(style.layers.map(layer => ({
+          id: layer.id,
+          type: layer.type,
+          source: layer.source,
+          sourceLayer: layer["source-layer"]
+        })));
+        console.groupEnd();
+
+        currentPackage = pkg;
+        currentOriginalStyle = structuredClone(style);
+        currentHeader = header;
+        currentPackageName = name;
+
+        fitBoundsBtn.disabled = false;
+        clearBtn.disabled = false;
+
+        setActiveStyle();
+      } catch (error) {
+        if (thisLoad !== loadSequence) return;
+
+        console.error(error);
+        setStatus(`Failed to load VTPK: ${error.message || error}`);
+        clearBtn.disabled = !currentPackage;
+      } finally {
+        if (thisLoad === loadSequence) {
+          openUrlBtn.disabled = false;
+        }
+      }
+    }
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      try {
+        const pkg = new TilePackage(new FileSource(file));
+        await loadPackage(pkg, file.name);
+      } catch (error) {
+        console.error(error);
+        setStatus(`Failed to open file: ${error.message || error}`);
+      } finally {
+        fileInput.value = "";
+      }
+    });
+
+    async function openRemotePackage() {
+      const url = remoteUrlInput.value.trim();
+
+      if (!url) {
+        setStatus("Enter a remote VTPK / TPKX URL first.");
+        return;
+      }
+
+      try {
+        const pkg = new TilePackage(url);
+        await loadPackage(pkg, url.split("/").pop() || "Remote VTPK");
+      } catch (error) {
+        console.error(error);
+        setStatus(`Failed to open URL: ${error.message || error}`);
+      }
+    }
+
+    openUrlBtn.addEventListener("click", openRemotePackage);
+
+    remoteUrlInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        openRemotePackage();
+      }
+    });
+
+    fitBoundsBtn.addEventListener("click", fitToBounds);
+
+
+    backgroundToggle.addEventListener("change", () => {
+      if (currentPackage) {
+        setActiveStyle();
+      } else {
+        map.setStyle(
+          makeCompositeStyle(EMPTY_STYLE)
+        );
+      }
+    });
+
+    tileBoundaryToggle.addEventListener("change", () => {
+      map.showTileBoundaries = tileBoundaryToggle.checked;
+    });
+
+    clearBtn.addEventListener("click", () => {
+      // Invalidate any pending load or style operation.
+      ++loadSequence;
+      ++styleSequence;
+
+      currentPackage = null;
+      currentPackageStyle = null;
+      currentOriginalStyle = null;
+      currentPackageName = "";
+      currentHeader = null;
+
+      fitBoundsBtn.disabled = true;
+      clearBtn.disabled = true;
+
+      // Restore default options.
+      tileBoundaryToggle.checked = false;
+      map.showTileBoundaries = false;
+
+      // Remove all VTPK layers and sources by replacing the style.
+      map.setStyle(makeCompositeStyle(EMPTY_STYLE));
+
+      setStatus("VTPK cleared. Ready to load another package.");
+    });
+
+    map.on("click", event => {
+      const features = map.queryRenderedFeatures(event.point);
+
+      if (!features.length) return;
+
+      const feature = features.find(
+        item => item.layer && item.layer.id !== ESRI_LAYER_ID
+      );
+
+      if (!feature) return;
+
+      const properties = feature.properties || {};
+      const entries = Object.entries(properties).slice(0, 40);
+
+      const container = document.createElement("div");
+
+      const title = document.createElement("div");
+      title.className = "popup-title";
+      title.textContent = feature.layer?.["source-layer"] ||
+        feature.layer?.id ||
+        "Feature";
+
+      container.append(title);
+
+      if (entries.length === 0) {
+        const empty = document.createElement("div");
+        empty.textContent = "No properties";
+        container.append(empty);
+      } else {
+        for (const [key, value] of entries) {
+          const row = document.createElement("div");
+          row.className = "popup-row";
+
+          const keyEl = document.createElement("span");
+          keyEl.className = "popup-key";
+          keyEl.textContent = `${key}: `;
+
+          const valueEl = document.createElement("span");
+          valueEl.textContent = value == null ? "" : String(value);
+
+          row.append(keyEl, valueEl);
+          container.append(row);
+        }
+      }
+
+      new maplibregl.Popup({ maxWidth: "320px" })
+        .setLngLat(event.lngLat)
+        .setDOMContent(container)
+        .addTo(map);
+    });
+
+    map.on("error", event => {
+      if (event.error) {
+        console.warn("MapLibre error:", event.error);
+      }
+    });
+  </script>
+</body>
+</html>

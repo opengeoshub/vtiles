@@ -1,0 +1,1806 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MBTiles Viewer</title>
+
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/sql-wasm.js"></script>
+
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #111315;
+  --panel: #191c1f;
+  --panel-hover: #292e33;
+  --border: #3b4249;
+  --text: #e8eaed;
+  --muted: #9aa3ad;
+  --accent: #65a9ff;
+  --toolbar-height: 58px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+button, input { font: inherit; }
+
+#app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+#toolbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 var(--toolbar-height);
+  min-height: var(--toolbar-height);
+  padding: 8px 14px;
+  background: #191c1f;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1px solid #466b91;
+  border-radius: 7px;
+  background: #24384d;
+  color: #a8d1ff;
+  font-size: 17px;
+}
+
+.brand-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.brand-subtitle { margin-top: 2px; color: var(--muted); font-size: 10px; }
+
+.toolbar-separator {
+  width: 1px;
+  height: 28px;
+  flex-shrink: 0;
+  background: var(--border);
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.toolbar-button, .file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #424a52;
+  border-radius: 6px;
+  background: #22262a;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toolbar-button:hover, .file-button:hover {
+  background: var(--panel-hover);
+  border-color: #66717c;
+}
+
+.toolbar-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.toolbar-button.primary, .file-button.primary {
+  background: #24384d;
+  border-color: #3a5d80;
+}
+
+.toolbar-button.primary:hover, .file-button.primary:hover {
+  background: #2c4862;
+}
+
+input[type=file] { display: none; }
+
+.toolbar-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 5px;
+  color: #d7dce1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+input[type=checkbox] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+#status {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#status.error { color: #ff7777; }
+
+#mapWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  background: #24282c;
+}
+
+#layersPanel {
+  position: absolute;
+  z-index: 5;
+  top: 140px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  width: 235px;
+  max-width: calc(100% - 28px);
+  max-height: calc(100% - 180px);
+  overflow: hidden;
+  border: 1px solid #454c54;
+  border-radius: 9px;
+  background: rgba(25,28,31,.95);
+  box-shadow: 0 5px 22px #0005;
+  backdrop-filter: blur(10px);
+}
+
+#layersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--border);
+}
+
+#layersTitle { font-size: 13px; font-weight: 700; }
+
+#layerCount {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+#collapseLayers {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid #454c54;
+  border-radius: 5px;
+  background: #25292d;
+  color: var(--text);
+  cursor: pointer;
+}
+
+#layersBody {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 7px 10px 10px;
+}
+
+#layersPanel.collapsed #layersBody { display: none; }
+#layersPanel.collapsed { max-height: none; }
+
+#allLayersRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #343a40;
+  cursor: pointer;
+}
+
+#layerList { display: flex; flex-direction: column; gap: 1px; }
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 29px;
+  padding: 4px 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.layer-row:hover { background: #ffffff0a; }
+.layer-row input { flex-shrink: 0; }
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 1px solid #ffffff66;
+  border-radius: 3px;
+}
+
+.layer-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #e2e6ea;
+  font-size: 12px;
+}
+
+.empty-layers {
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feature-popup .maplibregl-popup-content {
+  max-width: min(360px,calc(100vw - 40px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #454c54;
+  border-radius: 8px;
+  background: #191c1f;
+  color: #e8eaed;
+  box-shadow: 0 6px 24px #0008;
+}
+
+.feature-popup .maplibregl-popup-close-button {
+  top: 5px;
+  right: 6px;
+  width: 25px;
+  height: 25px;
+  border-radius: 4px;
+  color: #e8eaed;
+  font-size: 19px;
+}
+
+.feature-popup .maplibregl-popup-close-button:hover { background: #ffffff16; }
+
+.feature-popup .maplibregl-popup-tip {
+  border-top-color: #191c1f;
+  border-bottom-color: #191c1f;
+}
+
+.popup-content { min-width: 200px; max-width: 330px; }
+
+.popup-heading {
+  padding: 10px 34px 9px 12px;
+  border-bottom: 1px solid #343a40;
+  background: #22272b;
+}
+
+.popup-title { overflow-wrap: anywhere; font-size: 13px; font-weight: 700; }
+
+.popup-subtitle {
+  margin-top: 3px;
+  color: #aab4be;
+  font-size: 11px;
+}
+
+.popup-properties {
+  max-height: 240px;
+  overflow: auto;
+  padding: 5px 12px 10px;
+}
+
+.popup-property {
+  display: grid;
+  grid-template-columns: minmax(85px,1fr) minmax(0,1.5fr);
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid #ffffff0c;
+}
+
+.popup-key { color: #9da8b3; overflow-wrap: anywhere; }
+
+.popup-value {
+  color: #f0f2f4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.popup-empty { padding: 12px 0; color: #9da8b3; }
+
+.maplibregl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid #454b51 !important;
+  border-radius: 7px !important;
+  background: #202428 !important;
+  box-shadow: 0 2px 8px #0003 !important;
+}
+
+.maplibregl-ctrl-group button { background-color: #202428 !important; }
+.maplibregl-ctrl-group button span { filter: invert(1); }
+
+.maplibregl-ctrl-attrib {
+  background: #191c1fdd !important;
+  color: #e8eaed !important;
+}
+
+.maplibregl-ctrl-attrib a { color: #9dcaff !important; }
+.optional-short { display: none; }
+
+@media (max-width: 900px) {
+  :root { --toolbar-height: 54px; }
+
+  #toolbar { gap: 7px; padding: 7px 9px; }
+  .brand { margin-right: 2px; }
+  .brand-subtitle { display: none; }
+  .toolbar-button, .file-button { padding: 7px 9px; }
+  .optional-label { display: none; }
+  .optional-short { display: inline; }
+}
+
+@media (max-width: 600px) {
+  :root { --toolbar-height: auto; }
+
+  #toolbar { flex-wrap: wrap; gap: 6px; padding: 7px 8px; }
+  .brand { flex: 1; }
+  .toolbar-separator { display: none; }
+  .toolbar-actions { order: 2; width: 100%; overflow-x: auto; }
+  #status { order: 1; flex: 0 1 auto; max-width: 42%; margin-left: 0; }
+
+  .toolbar-button, .file-button {
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .toolbar-check { font-size: 12px; }
+
+  #layersPanel {
+    top: 100px;
+    right: 12px;
+    max-height: calc(100% - 115px);
+  }
+
+  .maplibregl-ctrl-top-right {
+    top: 8px;
+    right: auto;
+    left: 8px;
+  }
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+  <header id="toolbar">
+    <div class="brand">
+      <div class="brand-mark">⌖</div>
+      <div>
+        <div class="brand-title">MBTiles Viewer</div>
+        <div class="brand-subtitle">MapLibre GL JS · Local vector and raster tiles</div>
+      </div>
+    </div>
+
+    <div class="toolbar-separator"></div>
+
+    <div class="toolbar-actions">
+      <label class="file-button primary" for="fileInput">
+        <span>＋</span> Open MBTiles
+      </label>
+      <input id="fileInput" type="file" accept=".mbtiles,.sqlite,.db">
+
+      <button id="chooseStyle" class="toolbar-button" disabled>Choose style</button>
+      <input id="styleInput" type="file" accept=".json,application/json">
+
+      <button id="fitBounds" class="toolbar-button" disabled>Fit bounds</button>
+
+      <label class="toolbar-check" title="Show or hide the Esri background">
+        <input id="esriToggle" type="checkbox" checked>
+        <span>Background</span>
+      </label>
+
+      <label class="toolbar-check" title="Show vector tile boundaries">
+        <input id="tileBoundsToggle" type="checkbox">
+        <span class="optional-label">Tile boundaries</span>
+        <span class="optional-short">Tiles</span>
+      </label>
+    </div>
+
+    <div id="status">Ready · Open an MBTiles file</div>
+  </header>
+
+  <main id="mapWrap">
+    <div id="map"></div>
+
+    <aside id="layersPanel">
+      <div id="layersHeader">
+        <div>
+          <span id="layersTitle">Layers</span>
+          <span id="layerCount">(0)</span>
+        </div>
+        <button id="collapseLayers" title="Collapse layers panel" aria-label="Collapse layers panel">−</button>
+      </div>
+
+      <div id="layersBody">
+        <label id="allLayersRow">
+          <input id="allLayersToggle" type="checkbox" disabled>
+          <span class="layer-name">All layers</span>
+        </label>
+        <div id="layerList">
+          <div class="empty-layers">Open an MBTiles file to inspect layers.</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+
+  const ESRI_URL =
+    "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+
+  const palette = [
+    "#e76f51", "#457b9d", "#2a9d8f", "#9b5de5", "#f4a261",
+    "#d1495b", "#588157", "#4361ee", "#bc6c25", "#7b2cbf",
+    "#0081a7", "#c44536", "#e9c46a", "#5e60ce", "#00b4d8",
+    "#80b918", "#ff70a6", "#6d6875", "#90be6d", "#f94144"
+  ];
+
+  let SQL = null;
+  let db = null;
+  let metadata = {};
+  let tileTable = null;
+  let tileFormat = "pbf";
+  let isVector = false;
+  let bounds = null;
+  let generatedLayers = [];
+  let layerColors = new Map();
+  let loading = false;
+  let activePopup = null;
+  let mbtilesLoaded = false;
+  let styleApplying = false;
+
+  const vectorSourceId = "mbtiles-vector-source";
+  const rasterSourceId = "mbtiles-raster-source";
+  const rasterLayerId = "mbtiles-raster-layer";
+
+  function setStatus(message = "", error = false) {
+    $("status").textContent = message;
+    $("status").title = message;
+    $("status").classList.toggle("error", error);
+  }
+
+  function sqlString(value) {
+    return "'" + String(value).replace(/'/g, "''") + "'";
+  }
+
+  /*
+   * Only look for "tiles" in sqlite_master.
+   * Both tables and views are supported.
+   */
+  function detectTileTable() {
+    if (!db) return null;
+
+    const result = db.exec(`
+      SELECT name, type
+      FROM sqlite_master
+      WHERE name = 'tiles'
+        AND type IN ('table', 'view')
+      LIMIT 1
+    `);
+
+    if (!result.length || !result[0].values.length) {
+      return null;
+    }
+
+    const [name, type] = result[0].values[0];
+    const columns = columnsOf(String(name));
+
+    const required = [
+      "zoom_level",
+      "tile_column",
+      "tile_row",
+      "tile_data"
+    ];
+
+    if (!required.every(column => columns.includes(column))) {
+      throw new Error(
+        'The "tiles" ' + type +
+        ' object must contain zoom_level, tile_column, tile_row and tile_data.'
+      );
+    }
+
+    return String(name);
+  }
+
+  function columnsOf(table) {
+    const escaped = '"' + String(table).replace(/"/g, '""') + '"';
+    const result = db.exec("PRAGMA table_info(" + escaped + ")");
+
+    if (result.length && result[0].values.length) {
+      return result[0].values.map(row => String(row[1]));
+    }
+
+    // PRAGMA table_info can return no columns for some views.
+    // Fall back to querying the view/table schema without reading tile rows.
+    try {
+      const test = db.exec(
+        "SELECT * FROM " + escaped + " LIMIT 0"
+      );
+
+      if (test.length && test[0].columns) {
+        return test[0].columns;
+      }
+    } catch (_) {}
+
+    return [];
+  }
+
+  function rowsOf(sql, params = []) {
+    const stmt = db.prepare(sql);
+
+    try {
+      stmt.bind(params);
+      const result = [];
+
+      while (stmt.step()) {
+        result.push(stmt.getAsObject());
+      }
+
+      return result;
+    } finally {
+      stmt.free();
+    }
+  }
+
+  function readMetadata() {
+    const result = {};
+
+    // Metadata is optional. Tile data is always read from "tiles".
+    const exists = db.exec(`
+      SELECT name
+      FROM sqlite_master
+      WHERE name = 'metadata'
+        AND type IN ('table', 'view')
+      LIMIT 1
+    `);
+
+    if (exists.length && exists[0].values.length) {
+      try {
+        rowsOf("SELECT name, value FROM metadata").forEach(row => {
+          result[String(row.name)] = String(row.value ?? "");
+        });
+      } catch (error) {
+        console.warn("Could not read optional metadata:", error);
+      }
+    }
+
+    return result;
+  }
+
+  function parseBounds(value) {
+    if (!value) return null;
+
+    const p = String(value).split(",").map(Number);
+
+    if (p.length !== 4 || p.some(v => !Number.isFinite(v))) {
+      return null;
+    }
+
+    return [[p[0], p[1]], [p[2], p[3]]];
+  }
+
+  function hashColor(name) {
+    let hash = 0;
+
+    for (const ch of String(name)) {
+      hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
+    }
+
+    return palette[Math.abs(hash) % palette.length];
+  }
+
+  function colorForLayer(name) {
+    if (!layerColors.has(name)) {
+      layerColors.set(name, hashColor(name));
+    }
+
+    return layerColors.get(name);
+  }
+
+  function safeId(name) {
+    return String(name).replace(/[^a-zA-Z0-9_-]/g, "-") || "layer";
+  }
+
+  function getVectorDefinitions() {
+    let defs = [];
+
+    if (metadata.json) {
+      try {
+        const parsed = JSON.parse(metadata.json);
+
+        if (Array.isArray(parsed.vector_layers)) {
+          defs = parsed.vector_layers;
+        } else if (Array.isArray(parsed.layers)) {
+          defs = parsed.layers;
+        }
+      } catch (_) {}
+    }
+
+    if (!defs.length && metadata.vector_layers) {
+      try {
+        const parsed = JSON.parse(metadata.vector_layers);
+        if (Array.isArray(parsed)) defs = parsed;
+      } catch (_) {}
+    }
+
+    return defs;
+  }
+
+  function addGenerated(id, sourceLayer, type, filter, paint, color) {
+    map.addLayer({
+      id,
+      type,
+      source: vectorSourceId,
+      "source-layer": sourceLayer,
+      filter,
+      layout: { visibility: "visible" },
+      paint
+    });
+
+    generatedLayers.push({
+      id,
+      sourceLayer,
+      visible: true,
+      type,
+      color
+    });
+  }
+
+  function removeMbtilesLayers() {
+    if (activePopup) {
+      activePopup.remove();
+      activePopup = null;
+    }
+
+    generatedLayers.forEach(item => {
+      if (map.getLayer(item.id)) {
+        map.removeLayer(item.id);
+      }
+    });
+
+    generatedLayers = [];
+
+    if (map.getLayer(rasterLayerId)) {
+      map.removeLayer(rasterLayerId);
+    }
+
+    if (map.getSource(rasterSourceId)) {
+      map.removeSource(rasterSourceId);
+    }
+
+    if (map.getSource(vectorSourceId)) {
+      map.removeSource(vectorSourceId);
+    }
+
+    renderLayerControls();
+  }
+
+  function createVectorStyle() {
+    const defs = getVectorDefinitions();
+
+    if (!defs.length) {
+      throw new Error(
+        "Vector tiles detected, but metadata.json does not define vector_layers. Choose a compatible style JSON."
+      );
+    }
+
+    map.addSource(vectorSourceId, {
+      type: "vector",
+      tiles: ["mbtiles://tiles/{z}/{x}/{y}"],
+      minzoom: Math.max(0, Number(metadata.minzoom || 0)),
+      maxzoom: Math.min(24, Number(metadata.maxzoom || 14))
+    });
+
+    defs.forEach((def, index) => {
+      const sourceLayer = def.id || def["source-layer"] || def.name;
+      if (!sourceLayer) return;
+
+      const color = colorForLayer(sourceLayer);
+      const key = safeId(sourceLayer) + "-" + index;
+
+      addGenerated(
+        "mb-" + key + "-point",
+        sourceLayer,
+        "circle",
+        ["==", ["geometry-type"], "Point"],
+        {
+          "circle-radius": 3.5,
+          "circle-color": color,
+          "circle-stroke-color": "#17191b",
+          "circle-stroke-width": 0.8
+        },
+        color
+      );
+
+      addGenerated(
+        "mb-" + key + "-line",
+        sourceLayer,
+        "line",
+        ["==", ["geometry-type"], "LineString"],
+        {
+          "line-color": color,
+          "line-width": 1.6
+        },
+        color
+      );
+
+      addGenerated(
+        "mb-" + key + "-fill",
+        sourceLayer,
+        "fill",
+        ["==", ["geometry-type"], "Polygon"],
+        {
+          "fill-color": color,
+          "fill-opacity": 0.28
+        },
+        color
+      );
+
+      addGenerated(
+        "mb-" + key + "-outline",
+        sourceLayer,
+        "line",
+        ["==", ["geometry-type"], "Polygon"],
+        {
+          "line-color": color,
+          "line-width": 1.1
+        },
+        color
+      );
+    });
+
+    isVector = true;
+  }
+
+  function createRasterStyle() {
+    map.addSource(rasterSourceId, {
+      type: "raster",
+      tiles: ["mbtiles://tiles/{z}/{x}/{y}"],
+      tileSize: 256,
+      minzoom: Math.max(0, Number(metadata.minzoom || 0)),
+      maxzoom: Math.min(24, Number(metadata.maxzoom || 18))
+    });
+
+    map.addLayer({
+      id: rasterLayerId,
+      type: "raster",
+      source: rasterSourceId,
+      layout: { visibility: "visible" }
+    });
+
+    generatedLayers.push({
+      id: rasterLayerId,
+      sourceLayer: "MBTiles raster",
+      visible: true,
+      type: "raster",
+      color: "#8d99ae"
+    });
+
+    isVector = false;
+  }
+
+  function getStyleLayerColor(layer) {
+    const paint = layer.paint || {};
+
+    const colorKeys = [
+      "fill-color",
+      "line-color",
+      "circle-color",
+      "text-color",
+      "icon-color",
+      "background-color",
+      "fill-extrusion-color"
+    ];
+
+    for (const key of colorKeys) {
+      if (typeof paint[key] === "string") {
+        return paint[key];
+      }
+    }
+
+    return hashColor(layer["source-layer"] || layer.id || "layer");
+  }
+
+  function getStyleSourceDefinition() {
+    const minzoom = Math.max(0, Number(metadata.minzoom || 0));
+    const maxzoom = Math.min(
+      24,
+      Number(metadata.maxzoom || (isVector ? 14 : 18))
+    );
+
+    if (isVector) {
+      return {
+        type: "vector",
+        tiles: ["mbtiles://tiles/{z}/{x}/{y}"],
+        minzoom,
+        maxzoom
+      };
+    }
+
+    return {
+      type: "raster",
+      tiles: ["mbtiles://tiles/{z}/{x}/{y}"],
+      tileSize: 256,
+      minzoom,
+      maxzoom
+    };
+  }
+
+  /*
+   * Apply the selected MapLibre style JSON to the loaded MBTiles.
+   * The original remote tile sources are not used.
+   */
+  function applyMbtilesStyle(style, filename = "Custom style") {
+    if (!db || !mbtilesLoaded) {
+      throw new Error("Please open an MBTiles file first.");
+    }
+
+    if (!style || style.version !== 8 || !Array.isArray(style.layers)) {
+      throw new Error(
+        "Invalid style JSON: expected MapLibre style version 8 and a layers array."
+      );
+    }
+
+    const expectedSourceType = isVector ? "vector" : "raster";
+    const localSourceId = isVector ? vectorSourceId : rasterSourceId;
+    const originalSources = style.sources || {};
+
+    const compatibleSourceIds = new Set(
+      Object.entries(originalSources)
+        .filter(([, source]) =>
+          source && source.type === expectedSourceType
+        )
+        .map(([id]) => id)
+    );
+
+    const importedLayers = [];
+    const importedRecords = [];
+    const importedIds = new Set();
+
+    const availableSourceLayers = new Set(
+      getVectorDefinitions()
+        .map(def => def.id || def["source-layer"] || def.name)
+        .filter(Boolean)
+    );
+
+    for (let index = 0; index < style.layers.length; index++) {
+      const originalLayer = style.layers[index];
+
+      if (!originalLayer || typeof originalLayer.id !== "string") {
+        continue;
+      }
+
+      // Background layers have no source.
+      // Keep them from the selected style, but give them unique IDs.
+      if (originalLayer.type === "background") {
+        const id =
+          "mbtiles-style-" + safeId(originalLayer.id) + "-" + index;
+
+        if (importedIds.has(id)) continue;
+        importedIds.add(id);
+
+        const layer = {
+          ...originalLayer,
+          id
+        };
+
+        importedLayers.push(layer);
+
+        importedRecords.push({
+          id,
+          sourceLayer: originalLayer.id,
+          visible: originalLayer.layout?.visibility !== "none",
+          type: "background",
+          color: getStyleLayerColor(originalLayer)
+        });
+
+        continue;
+      }
+
+      // Only import layers that refer to a source of the expected type.
+      if (
+        !originalLayer.source ||
+        !compatibleSourceIds.has(originalLayer.source)
+      ) {
+        continue;
+      }
+
+      const sourceLayer = originalLayer["source-layer"];
+
+      if (isVector) {
+        if (!sourceLayer) continue;
+
+        if (
+          availableSourceLayers.size &&
+          !availableSourceLayers.has(sourceLayer)
+        ) {
+          console.warn(
+            "Skipping style layer '" + originalLayer.id +
+            "': source-layer '" + sourceLayer +
+            "' is absent from MBTiles metadata."
+          );
+          continue;
+        }
+      }
+
+      const id =
+        "mbtiles-style-" + safeId(originalLayer.id) + "-" + index;
+
+      if (importedIds.has(id)) continue;
+      importedIds.add(id);
+
+      const layer = {
+        ...originalLayer,
+        id,
+        source: localSourceId
+      };
+
+      importedLayers.push(layer);
+
+      importedRecords.push({
+        id,
+        sourceLayer: isVector
+          ? sourceLayer
+          : (originalLayer.name || originalLayer.id),
+        visible: originalLayer.layout?.visibility !== "none",
+        type: originalLayer.type,
+        color: getStyleLayerColor(originalLayer)
+      });
+    }
+
+    if (!importedLayers.length) {
+      throw new Error(
+        "No compatible layers found. Check the style source type and source-layer names."
+      );
+    }
+
+    const sources = {
+      "esri-background-source": {
+        type: "raster",
+        tiles: [ESRI_URL],
+        tileSize: 256,
+        attribution: "© Esri"
+      }
+    };
+
+    sources[localSourceId] = getStyleSourceDefinition();
+
+    const layers = [
+      {
+        id: "esri-background-layer",
+        type: "raster",
+        source: "esri-background-source",
+        layout: {
+          visibility: $("esriToggle").checked ? "visible" : "none"
+        }
+      },
+      ...importedLayers
+    ];
+
+    const localStyle = {
+      version: 8,
+      name: style.name || filename,
+      sources,
+      layers
+    };
+
+    if (style.glyphs) localStyle.glyphs = style.glyphs;
+    if (style.sprite) localStyle.sprite = style.sprite;
+    if (style.transition) localStyle.transition = style.transition;
+
+    setStatus("Applying style: " + filename + "...");
+
+    styleApplying = true;
+    $("chooseStyle").disabled = true;
+
+    map.once("style.load", () => {
+      generatedLayers = importedRecords;
+      layerColors = new Map();
+
+      importedRecords.forEach(item => {
+        layerColors.set(item.sourceLayer, item.color);
+      });
+
+      map.showTileBoundaries = $("tileBoundsToggle").checked;
+
+      renderLayerControls();
+
+      styleApplying = false;
+      $("chooseStyle").disabled = !mbtilesLoaded;
+
+      setStatus(
+        "Style applied: " + filename + " · " +
+        importedRecords.length + " layers"
+      );
+    });
+
+    // setStyle does not change the current map center or zoom.
+    map.setStyle(localStyle);
+  }
+
+  function renderLayerControls() {
+    const groups = new Map();
+
+    generatedLayers.forEach(item => {
+      const name = item.sourceLayer || item.id;
+
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(item);
+    });
+
+    const list = $("layerList");
+    list.replaceChildren();
+
+    $("layerCount").textContent = "(" + groups.size + ")";
+
+    if (!groups.size) {
+      const empty = document.createElement("div");
+      empty.className = "empty-layers";
+      empty.textContent = "Open an MBTiles file to see layers.";
+      list.appendChild(empty);
+
+      $("allLayersToggle").checked = false;
+      $("allLayersToggle").indeterminate = false;
+      $("allLayersToggle").disabled = true;
+      return;
+    }
+
+    for (const [name, items] of groups) {
+      const row = document.createElement("label");
+      row.className = "layer-row";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = items.every(item => item.visible);
+      checkbox.setAttribute("aria-label", name);
+
+      const swatch = document.createElement("span");
+      swatch.className = "swatch";
+      swatch.style.background = items[0].color || colorForLayer(name);
+
+      const label = document.createElement("span");
+      label.className = "layer-name";
+      label.textContent = name;
+
+      row.append(checkbox, swatch, label);
+      list.appendChild(row);
+
+      checkbox.addEventListener("change", () => {
+        items.forEach(item => {
+          item.visible = checkbox.checked;
+
+          if (map.getLayer(item.id)) {
+            map.setLayoutProperty(
+              item.id,
+              "visibility",
+              checkbox.checked ? "visible" : "none"
+            );
+          }
+        });
+
+        updateAllLayersCheckbox();
+      });
+    }
+
+    updateAllLayersCheckbox();
+  }
+
+  function updateAllLayersCheckbox() {
+    const all = $("allLayersToggle");
+    const groups = new Map();
+
+    generatedLayers.forEach(item => {
+      const name = item.sourceLayer || item.id;
+
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(item);
+    });
+
+    const values = [...groups.values()];
+    const count = values.length;
+
+    const visible = values.filter(items =>
+      items.every(item => item.visible)
+    ).length;
+
+    all.disabled = count === 0;
+    all.checked = count > 0 && visible === count;
+    all.indeterminate = visible > 0 && visible < count;
+  }
+
+  $("allLayersToggle").addEventListener("change", () => {
+    const show = $("allLayersToggle").checked;
+
+    generatedLayers.forEach(item => {
+      item.visible = show;
+
+      if (map.getLayer(item.id)) {
+        map.setLayoutProperty(
+          item.id,
+          "visibility",
+          show ? "visible" : "none"
+        );
+      }
+    });
+
+    renderLayerControls();
+  });
+
+  $("collapseLayers").addEventListener("click", () => {
+    const panel = $("layersPanel");
+    const collapsed = panel.classList.toggle("collapsed");
+
+    $("collapseLayers").textContent = collapsed ? "+" : "−";
+    $("collapseLayers").title = collapsed
+      ? "Expand layers panel"
+      : "Collapse layers panel";
+
+    $("collapseLayers").setAttribute(
+      "aria-label",
+      $("collapseLayers").title
+    );
+  });
+
+  function tileCoordinates(url) {
+    const match = url.match(
+      /^mbtiles:\/\/tiles\/(\d+)\/(-?\d+)\/(-?\d+)$/
+    );
+
+    if (!match) {
+      throw new Error("Invalid MBTiles tile URL.");
+    }
+
+    return {
+      z: Number(match[1]),
+      x: Number(match[2]),
+      y: Number(match[3])
+    };
+  }
+
+  /*
+   * Always query the "tiles" table or view.
+   * No dependency on map, images or tile_id.
+   */
+  function getTileData(z, x, y) {
+    if (!db || !tileTable) {
+      throw new Error('No MBTiles "tiles" table or view loaded.');
+    }
+
+    const max = 2 ** z - 1;
+
+    if (x < 0 || x > max || y < 0 || y > max) {
+      throw new Error("Tile coordinate out of range.");
+    }
+
+    // MBTiles uses TMS rows, whereas MapLibre requests XYZ.
+    const tmsY = max - y;
+    const escapedTable = '"' + tileTable.replace(/"/g, '""') + '"';
+
+    const rows = rowsOf(
+      `SELECT tile_data
+       FROM ${escapedTable}
+       WHERE zoom_level = ?
+         AND tile_column = ?
+         AND tile_row = ?
+       LIMIT 1`,
+      [z, x, tmsY]
+    );
+
+    if (rows.length && rows[0].tile_data) {
+      return rows[0].tile_data;
+    }
+
+    throw new Error("Tile not found.");
+  }
+
+  function asBytes(value) {
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+
+    if (ArrayBuffer.isView(value)) {
+      return new Uint8Array(
+        value.buffer,
+        value.byteOffset,
+        value.byteLength
+      );
+    }
+
+    return new Uint8Array(value);
+  }
+
+  async function maybeGunzip(bytes) {
+    if (
+      bytes.length < 2 ||
+      bytes[0] !== 0x1f ||
+      bytes[1] !== 0x8b
+    ) {
+      return bytes;
+    }
+
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error(
+        "Gzip decompression unavailable. Use a recent Chrome or Edge."
+      );
+    }
+
+    const stream = new Blob([bytes])
+      .stream()
+      .pipeThrough(new DecompressionStream("gzip"));
+
+    return new Uint8Array(
+      await new Response(stream).arrayBuffer()
+    );
+  }
+
+  maplibregl.addProtocol("mbtiles", async params => {
+    const { z, x, y } = tileCoordinates(params.url);
+    const raw = asBytes(getTileData(z, x, y));
+
+    const data = isVector ? await maybeGunzip(raw) : raw;
+
+    return {
+      data: data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength
+      )
+    };
+  });
+
+  const map = new maplibregl.Map({
+    container: "map",
+    center: [0, 0],
+    zoom: 0,
+    minZoom: 0,
+    maxZoom: 22,
+    style: {
+      version: 8,
+      sources: {
+        "esri-background-source": {
+          type: "raster",
+          tiles: [ESRI_URL],
+          tileSize: 256,
+          attribution: "© Esri"
+        }
+      },
+      layers: [{
+        id: "esri-background-layer",
+        type: "raster",
+        source: "esri-background-source",
+        layout: { visibility: "visible" }
+      }]
+    },
+    attributionControl: true
+  });
+
+  map.addControl(new maplibregl.FullscreenControl(), "top-right");
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  map.on("load", () => {
+    setStatus("Ready · Open an MBTiles file");
+  });
+
+  $("esriToggle").addEventListener("change", event => {
+    if (map.getLayer("esri-background-layer")) {
+      map.setLayoutProperty(
+        "esri-background-layer",
+        "visibility",
+        event.target.checked ? "visible" : "none"
+      );
+    }
+  });
+
+  $("tileBoundsToggle").addEventListener("change", event => {
+    map.showTileBoundaries = event.target.checked;
+    map.triggerRepaint();
+  });
+
+  function formatPropertyValue(value) {
+    if (value === null || value === undefined) return "null";
+
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (_) {
+        return String(value);
+      }
+    }
+
+    return String(value);
+  }
+
+  function buildFeaturePopup(feature) {
+    const root = document.createElement("div");
+    root.className = "popup-content";
+
+    const heading = document.createElement("div");
+    heading.className = "popup-heading";
+
+    const title = document.createElement("div");
+    title.className = "popup-title";
+    title.textContent =
+      feature.sourceLayer || feature.layer?.id || "Feature";
+
+    const subtitle = document.createElement("div");
+    subtitle.className = "popup-subtitle";
+    subtitle.textContent =
+      (feature.geometry?.type || "Unknown geometry") +
+      " · ID: " + (feature.id ?? "—");
+
+    heading.append(title, subtitle);
+    root.appendChild(heading);
+
+    const propertiesBox = document.createElement("div");
+    propertiesBox.className = "popup-properties";
+
+    const entries = Object.entries(feature.properties || {});
+
+    if (!entries.length) {
+      const empty = document.createElement("div");
+      empty.className = "popup-empty";
+      empty.textContent = "No properties";
+      propertiesBox.appendChild(empty);
+    } else {
+      entries.forEach(([key, value]) => {
+        const row = document.createElement("div");
+        row.className = "popup-property";
+
+        const keyNode = document.createElement("div");
+        keyNode.className = "popup-key";
+        keyNode.textContent = key;
+
+        const valueNode = document.createElement("div");
+        valueNode.className = "popup-value";
+        valueNode.textContent = formatPropertyValue(value);
+
+        row.append(keyNode, valueNode);
+        propertiesBox.appendChild(row);
+      });
+    }
+
+    root.appendChild(propertiesBox);
+    return root;
+  }
+
+  map.on("click", event => {
+    const visibleIds = generatedLayers
+      .filter(item =>
+        item.visible &&
+        map.getLayer(item.id) &&
+        item.type !== "raster" &&
+        item.type !== "background"
+      )
+      .map(item => item.id);
+
+    if (!visibleIds.length) {
+      if (activePopup) {
+        activePopup.remove();
+        activePopup = null;
+      }
+      return;
+    }
+
+    let features = [];
+
+    try {
+      features = map.queryRenderedFeatures(
+        event.point,
+        { layers: visibleIds }
+      );
+    } catch (error) {
+      console.warn("Feature query failed:", error);
+    }
+
+    if (!features.length) {
+      if (activePopup) {
+        activePopup.remove();
+        activePopup = null;
+      }
+      return;
+    }
+
+    const feature = features[0];
+
+    if (activePopup) activePopup.remove();
+
+    const popup = new maplibregl.Popup({
+      closeButton: true,
+      closeOnClick: false,
+      maxWidth: "360px",
+      className: "feature-popup",
+      offset: 10
+    })
+      .setLngLat(event.lngLat)
+      .setDOMContent(buildFeaturePopup(feature))
+      .addTo(map);
+
+    activePopup = popup;
+
+    popup.on("close", () => {
+      if (activePopup === popup) activePopup = null;
+    });
+  });
+
+  $("fitBounds").addEventListener("click", () => {
+    if (!bounds) {
+      setStatus(
+        "This MBTiles file has no valid bounds metadata.",
+        true
+      );
+      return;
+    }
+
+    map.fitBounds(bounds, {
+      padding: 45,
+      maxZoom: 16,
+      duration: 650
+    });
+  });
+
+  async function ensureSqlJs() {
+    if (SQL) return SQL;
+
+    SQL = await initSqlJs({
+      locateFile: file =>
+        "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/" + file
+    });
+
+    return SQL;
+  }
+
+  function detectFormat(meta, sample) {
+    if (meta.format) {
+      return String(meta.format).toLowerCase();
+    }
+
+    if (sample && sample.length > 3) {
+      if (sample[0] === 0x89 && sample[1] === 0x50) return "png";
+      if (sample[0] === 0xff && sample[1] === 0xd8) return "jpg";
+
+      // gzip-compressed vector tiles are common in MBTiles.
+      if (sample[0] === 0x1f && sample[1] === 0x8b) return "pbf";
+
+      if (
+        sample[0] === 0x52 &&
+        sample[1] === 0x49 &&
+        sample[2] === 0x46 &&
+        sample[3] === 0x46
+      ) {
+        return "webp";
+      }
+    }
+
+    return "pbf";
+  }
+
+  async function readMbtilesFile(file) {
+    if (!(file instanceof File)) {
+      throw new Error("Please select a valid MBTiles file.");
+    }
+
+    if (file.size === 0) {
+      throw new Error("The selected file is empty.");
+    }
+
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+
+    setStatus(
+      "Reading " + file.name + " (" + sizeMB + " MB)..."
+    );
+
+    try {
+      const buffer = await file.arrayBuffer();
+
+      if (buffer.byteLength !== file.size) {
+        throw new Error("The file was not read completely.");
+      }
+
+      return buffer;
+    } catch (error) {
+      console.warn(
+        "file.arrayBuffer() failed; trying FileReader:",
+        error
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        if (!(reader.result instanceof ArrayBuffer)) {
+          reject(new Error("The browser returned invalid file data."));
+          return;
+        }
+
+        if (reader.result.byteLength !== file.size) {
+          reject(new Error("The file was not read completely."));
+          return;
+        }
+
+        resolve(reader.result);
+      };
+
+      reader.onerror = () => {
+        reject(
+          reader.error ||
+          new Error("Chrome could not read the selected file.")
+        );
+      };
+
+      reader.onabort = () => {
+        reject(new Error("Reading the MBTiles file was cancelled."));
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  async function loadMbtiles(file) {
+    if (loading) return;
+
+    loading = true;
+    $("chooseStyle").disabled = true;
+    $("fitBounds").disabled = true;
+
+    setStatus("Preparing " + file.name + "...");
+
+    let newDb = null;
+
+    const oldDb = db;
+    const oldMetadata = metadata;
+    const oldTileTable = tileTable;
+    const oldTileFormat = tileFormat;
+    const oldIsVector = isVector;
+    const oldBounds = bounds;
+    const oldMbtilesLoaded = mbtilesLoaded;
+
+    try {
+      await ensureSqlJs();
+
+      const buffer = await readMbtilesFile(file);
+
+      setStatus(
+        "Opening SQLite database (" +
+        (buffer.byteLength / 1048576).toFixed(1) +
+        " MB)..."
+      );
+
+      newDb = new SQL.Database(new Uint8Array(buffer));
+      db = newDb;
+
+      setStatus('Checking the "tiles" table or view...');
+
+      /*
+       * Do not inspect map or images.
+       * Only the tiles table/view is accepted.
+       */
+      tileTable = detectTileTable();
+
+      if (!tileTable) {
+        throw new Error(
+          'Unsupported MBTiles schema: a "tiles" table or view with ' +
+          "zoom_level, tile_column, tile_row and tile_data is required."
+        );
+      }
+
+      metadata = readMetadata();
+
+      // Read a sample directly from tiles.
+      let sample = null;
+
+      try {
+        const escapedTable =
+          '"' + tileTable.replace(/"/g, '""') + '"';
+
+        const result = rowsOf(
+          `SELECT tile_data FROM ${escapedTable} LIMIT 1`
+        );
+
+        sample = result[0]?.tile_data || null;
+      } catch (error) {
+        console.warn("Could not read sample tile:", error);
+      }
+
+      tileFormat = detectFormat(
+        metadata,
+        sample ? asBytes(sample) : null
+      );
+
+      isVector =
+        ["pbf", "mvt", "mvt.gz"].includes(tileFormat) ||
+        !!metadata.json ||
+        !!metadata.vector_layers;
+
+      if (getVectorDefinitions().length) {
+        isVector = true;
+      }
+
+      bounds = parseBounds(metadata.bounds);
+
+      if (!map.isStyleLoaded()) {
+        await new Promise(resolve => map.once("load", resolve));
+      }
+
+      setStatus("Creating map layers...");
+
+      removeMbtilesLayers();
+      layerColors = new Map();
+
+      if (isVector) {
+        createVectorStyle();
+      } else {
+        createRasterStyle();
+      }
+
+      renderLayerControls();
+
+      if (oldDb && oldDb !== newDb) {
+        try {
+          oldDb.close();
+        } catch (error) {
+          console.warn("Could not close previous database:", error);
+        }
+      }
+
+      mbtilesLoaded = true;
+      $("chooseStyle").disabled = false;
+      $("fitBounds").disabled = !bounds;
+
+      if (bounds) {
+        map.fitBounds(bounds, {
+          padding: 45,
+          maxZoom: 15,
+          duration: 500
+        });
+      }
+
+      const layerCount = new Set(
+        generatedLayers.map(item => item.sourceLayer)
+      ).size;
+
+      setStatus(
+        "Loaded " + file.name + " · " +
+        layerCount + " layers · " +
+        (isVector ? "Vector tiles" : "Raster tiles")
+      );
+    } catch (error) {
+      console.error("MBTiles loading failed:", error);
+
+      if (newDb) {
+        if (db === newDb) db = oldDb;
+
+        try {
+          newDb.close();
+        } catch (closeError) {
+          console.warn(
+            "Could not close failed database:",
+            closeError
+          );
+        }
+      }
+
+      metadata = oldMetadata;
+      tileTable = oldTileTable;
+      tileFormat = oldTileFormat;
+      isVector = oldIsVector;
+      bounds = oldBounds;
+      mbtilesLoaded = oldMbtilesLoaded;
+
+      $("chooseStyle").disabled = !mbtilesLoaded;
+      $("fitBounds").disabled = !bounds;
+
+      setStatus(
+        "Failed to load MBTiles: " +
+        (error?.message || String(error)),
+        true
+      );
+    } finally {
+      loading = false;
+      $("chooseStyle").disabled = !mbtilesLoaded;
+    }
+  }
+
+  $("fileInput").addEventListener("change", event => {
+    const file = event.target.files?.[0];
+
+    if (file) {
+      loadMbtiles(file);
+    }
+
+    event.target.value = "";
+  });
+
+  $("chooseStyle").addEventListener("click", () => {
+    if (!mbtilesLoaded || loading || styleApplying) return;
+    $("styleInput").click();
+  });
+
+  $("styleInput").addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (!mbtilesLoaded || !db) {
+        throw new Error("Please open an MBTiles file first.");
+      }
+
+      if (loading || styleApplying) {
+        throw new Error("Please wait for the current operation to finish.");
+      }
+
+      setStatus("Reading style: " + file.name + "...");
+
+      const text = await file.text();
+      const style = JSON.parse(text);
+
+      applyMbtilesStyle(style, file.name);
+    } catch (error) {
+      console.error("Style loading failed:", error);
+
+      setStatus(
+        "Failed to load style: " +
+        (error?.message || String(error)),
+        true
+      );
+    } finally {
+      event.target.value = "";
+    }
+  });
+})();
+</script>
+</body>
+</html>
