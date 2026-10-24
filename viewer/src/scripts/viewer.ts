@@ -63,7 +63,7 @@ export function startViewer(): void {
   map.addControl(new FullscreenControl(), "top-right");
   map.addControl(new NavigationControl(), "top-right");
   map.addControl(new GlobeControl(), "top-right");
-  map.addControl(new ZoomLevelControl(), "bottom-left");
+  map.addControl(new ZoomLevelControl(), "top-right");
 
   let generation = 0;
   let currentAbort: AbortController | null = null;

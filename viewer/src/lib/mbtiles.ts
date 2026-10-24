@@ -4,14 +4,15 @@ import initSqlJs, {
   type SqlValue,
 } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm-browser.wasm?url";
-import { asBytes, gunzipIfNeeded, toArrayBuffer, vectorLayerIds } from "./bytes";
+import { asBytes, decompressTile, toArrayBuffer, vectorLayerIds } from "./bytes";
 import { boundsFromExtent, clampZoom, type Bounds } from "./bounds";
 import type { AddProtocolAction } from "maplibre-gl";
+import { openSqliteMbtiles } from "./sqlite-http";
 
 export interface MbtilesSession {
-  db: Database;
-  table: string;
   vector: boolean;
+  readTile(zoom: number, column: number, row: number): Promise<Uint8Array | null>;
+  close(): void;
 }
 
 export interface MbtilesInfo {
@@ -193,54 +194,57 @@ export async function openMbtilesBytes(bytes: Uint8Array): Promise<MbtilesInfo> 
     const escaped = quoteIdent(table);
     let sample: Uint8Array | null = null;
     try {
-      const sampleRows = rowsOf(
-        db,
-        `SELECT tile_data FROM ${escaped} LIMIT 1`,
-      );
+      const sampleRows = rowsOf(db, `SELECT tile_data FROM ${escaped} LIMIT 1`);
       sample = asBytes(sampleRows[0]?.tile_data);
     } catch (error) {
       console.warn("Could not read a sample MBTiles tile.", error);
     }
-
-    const format = detectFormat(metadata, sample);
-    let vectorLayers = layerIdsFromMetadata(metadata);
-    const image = ["png", "jpg", "jpeg", "webp", "gif", "avif"].includes(format);
-    let vector =
-      vectorLayers.length > 0 ||
-      ["pbf", "mvt", "mvt.gz"].includes(format) ||
-      (!image && !metadata.format);
-    if (vector && vectorLayers.length === 0) {
-      vectorLayers = await discoverLayers(db, table);
-    }
-    if (vector && vectorLayers.length === 0) {
-      throw new Error(
-        "Vector MBTiles were detected, but no vector layers were listed or found in a sample tile.",
-      );
-    }
-    if (!vector) vectorLayers = [];
-
-    let minzoom = clampZoom(metadata.minzoom, 0);
-    let maxzoom = clampZoom(metadata.maxzoom, vector ? 14 : 18);
+    let minzoom: number | null = null;
+    let maxzoom: number | null = null;
     if (!metadata.minzoom || !metadata.maxzoom) {
       try {
         const range = rowsOf(
           db,
           `SELECT MIN(zoom_level) AS minzoom, MAX(zoom_level) AS maxzoom FROM ${escaped}`,
         );
-        if (!metadata.minzoom) minzoom = clampZoom(range[0]?.minzoom, minzoom);
-        if (!metadata.maxzoom) maxzoom = clampZoom(range[0]?.maxzoom, maxzoom);
+        minzoom = numberOrNull(range[0]?.minzoom);
+        maxzoom = numberOrNull(range[0]?.maxzoom);
       } catch (error) {
         console.warn("Could not read MBTiles zoom range.", error);
       }
     }
-
-    return {
-      session: { db, table, vector },
-      bounds: boundsFromExtent(metadata.bounds),
+    const details = await tileDetails(metadata, sample, () => discoverLayers(db, table), {
       minzoom,
-      maxzoom: Math.max(minzoom, maxzoom),
-      vectorLayers,
-      attribution: metadata.attribution || undefined,
+      maxzoom,
+    });
+    return {
+      ...details,
+      session: {
+        vector: details.vector,
+        readTile(zoom, column, row) {
+          const stored = storedTileRow(metadata, zoom, row);
+          try {
+            const rows = rowsOf(
+              db,
+              `SELECT tile_data FROM ${escaped}
+               WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?
+               LIMIT 1`,
+              [zoom, column, stored],
+            );
+            return Promise.resolve(asBytes(rows[0]?.tile_data));
+          } catch (error) {
+            console.warn("MBTiles tile query failed.", error);
+            return Promise.resolve(null);
+          }
+        },
+        close() {
+          try {
+            db.close();
+          } catch (error) {
+            console.warn("Could not close the MBTiles database.", error);
+          }
+        },
+      },
     };
   } catch (error) {
     try {
@@ -252,24 +256,91 @@ export async function openMbtilesBytes(bytes: Uint8Array): Promise<MbtilesInfo> 
   }
 }
 
-export function adoptMbtiles(session: MbtilesSession | null): void {
-  if (active && active !== session) {
-    try {
-      active.db.close();
-    } catch (error) {
-      console.warn("Could not close the previous MBTiles database.", error);
-    }
+export async function openRemoteMbtiles(
+  url: string,
+  signal: AbortSignal,
+): Promise<MbtilesInfo> {
+  const remote = await openSqliteMbtiles(url, signal);
+  try {
+    const sample = remote.metadata.format ? null : await remote.sampleTile();
+    const details = await tileDetails(
+      remote.metadata,
+      sample,
+      async () => {
+        const bytes = sample ?? (await remote.sampleTile());
+        return bytes ? vectorLayerIds(bytes) : [];
+      },
+      remote,
+    );
+    return {
+      ...details,
+      session: {
+        vector: details.vector,
+        readTile(zoom, column, row) {
+          return remote.readTile(zoom, column, storedTileRow(remote.metadata, zoom, row));
+        },
+        close() {
+          remote.close();
+        },
+      },
+    };
+  } catch (error) {
+    remote.close();
+    throw error;
   }
+}
+
+async function tileDetails(
+  metadata: Record<string, string>,
+  sample: Uint8Array | null,
+  sampleLayers: () => Promise<string[]>,
+  zoom: { minzoom: number | null; maxzoom: number | null },
+): Promise<Omit<MbtilesInfo, "session"> & { vector: boolean }> {
+  const format = detectFormat(metadata, sample);
+  let vectorLayers = layerIdsFromMetadata(metadata);
+  const image = ["png", "jpg", "jpeg", "webp", "gif", "avif"].includes(format);
+  let vector =
+    vectorLayers.length > 0 ||
+    ["pbf", "mvt", "mvt.gz"].includes(format) ||
+    (!image && !metadata.format);
+  if (vector && vectorLayers.length === 0) vectorLayers = await sampleLayers();
+  if (vector && vectorLayers.length === 0) {
+    throw new Error(
+      "Vector MBTiles were detected, but no vector layers were listed or found in a sample tile.",
+    );
+  }
+  if (!vector) vectorLayers = [];
+  const minzoom = clampZoom(metadata.minzoom || zoom.minzoom, 0);
+  const maxzoom = clampZoom(metadata.maxzoom || zoom.maxzoom, vector ? 14 : 18);
+  return {
+    vector,
+    bounds: boundsFromExtent(metadata.bounds),
+    minzoom,
+    maxzoom: Math.max(minzoom, maxzoom),
+    vectorLayers,
+    attribution: metadata.attribution || undefined,
+  };
+}
+
+function storedTileRow(metadata: Record<string, string>, zoom: number, row: number): number {
+  // GeoLibre keeps XYZ rows only when metadata scheme is xyz. Otherwise MBTiles is TMS.
+  if (metadata.scheme?.toLowerCase() === "xyz") return row;
+  return 2 ** zoom - 1 - row;
+}
+
+function numberOrNull(value: SqlValue | undefined): number | null {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function adoptMbtiles(session: MbtilesSession | null): void {
+  if (active && active !== session) active.close();
   active = session;
 }
 
 export function discardMbtiles(session: MbtilesSession | null): void {
   if (!session || session === active) return;
-  try {
-    session.db.close();
-  } catch (error) {
-    console.warn("Could not close an unused MBTiles database.", error);
-  }
+  session.close();
 }
 
 function tileCoordinates(url: string): { z: number; x: number; y: number } {
@@ -279,30 +350,14 @@ function tileCoordinates(url: string): { z: number; x: number; y: number } {
 }
 
 export const serveMbtilesTile: AddProtocolAction = async (params) => {
-  if (!active) throw new Error("No MBTiles database is open.");
+  const session = active;
+  if (!session) throw new Error("No MBTiles database is open.");
   const { z, x, y } = tileCoordinates(params.url);
   const max = 2 ** z - 1;
   if (x < 0 || y < 0 || x > max || y > max) {
     throw new Error("Tile not found");
   }
-  // MBTiles stores TMS row numbers. MapLibre asks for XYZ.
-  const tmsY = max - y;
-  const escaped = quoteIdent(active.table);
-  let rows: Record<string, SqlValue>[];
-  try {
-    rows = rowsOf(
-      active.db,
-      `SELECT tile_data FROM ${escaped}
-       WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?
-       LIMIT 1`,
-      [z, x, tmsY],
-    );
-  } catch (error) {
-    console.warn("MBTiles tile query failed.", error);
-    throw new Error("Tile not found");
-  }
-  const bytes = asBytes(rows[0]?.tile_data);
+  const bytes = await session.readTile(z, x, y);
   if (!bytes) throw new Error("Tile not found");
-  const data = active.vector ? await gunzipIfNeeded(bytes) : bytes;
-  return { data: toArrayBuffer(data) };
+  return { data: toArrayBuffer(await decompressTile(bytes)) };
 };

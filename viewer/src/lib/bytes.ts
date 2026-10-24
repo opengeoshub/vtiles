@@ -1,15 +1,27 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 
-export async function gunzipIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
-  if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
+export async function decompressTile(bytes: Uint8Array): Promise<Uint8Array> {
+  const format = compressionFormat(bytes);
+  if (!format) return bytes;
   if (typeof DecompressionStream === "undefined") {
-    throw new Error("This browser cannot decompress gzip tiles.");
+    throw new Error("This browser cannot decompress MBTiles tiles.");
   }
   const stream = new Blob([toArrayBuffer(bytes)])
     .stream()
-    .pipeThrough(new DecompressionStream("gzip"));
+    .pipeThrough(new DecompressionStream(format));
   return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+export async function gunzipIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
+  return decompressTile(bytes);
+}
+
+function compressionFormat(bytes: Uint8Array): "gzip" | "deflate" | null {
+  if (bytes.length < 2) return null;
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) return "gzip";
+  if (bytes[0] === 0x78) return "deflate";
+  return null;
 }
 
 export function looksLikeImage(bytes: Uint8Array): boolean {

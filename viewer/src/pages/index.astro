@@ -6,6 +6,8 @@ import "../styles/viewer.css";
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
     <title>Tiles viewer</title>
   </head>
   <body>
@@ -32,9 +34,25 @@ import "../styles/viewer.css";
         <option value="">Examples</option>
         <optgroup label="PMTiles">
           <option value="https://latest.protomaps.com/v4.pmtiles">Protomaps v4</option>
+          <option value="https://data.source.coop/gishub/pmtiles/earth_blended.pmtiles">Natural Earth</option>
+        </optgroup>
+        <optgroup label="MBTiles">
+          <option value="https://data.source.coop/gishub/mbtiles/vietnam.mbtiles">
+            vietnam.mbtiles
+          </option>
+          <option value="https://data.source.coop/gishub/mbtiles/ne2.mbtiles">Natural Earth 2</option>
         </optgroup>
         <optgroup label="TileJSON">
-          <option value="/imagery.json">Esri World Imagery</option>
+          <option
+            value="https://api.maptiler.com/tiles/v3-openmaptiles/tiles.json?key=get_your_own_OpIi9ZULNHzrESv6T2vL"
+          >
+            OpenMapTiles
+          </option>
+          <option
+            value="https://raw.githubusercontent.com/maplibre/demotiles/gh-pages/tiles-mlt/plain/tiles.json"
+          >
+            MapLibre MLT
+          </option>
         </optgroup>
         <optgroup label={"{z}/{x}/{y}"}>
           <option value="https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}">

@@ -15,6 +15,8 @@ import { looksLikeImage, vectorLayerIds } from "./bytes";
 import {
   discardMbtiles,
   openMbtilesBytes,
+  openRemoteMbtiles,
+  type MbtilesInfo,
   type MbtilesSession,
 } from "./mbtiles";
 import {
@@ -65,7 +67,7 @@ export async function loadFile(file: File, token: number): Promise<LoadedSource>
   if (kind === "pmtiles") return finishPmtiles(pmtilesFromFile(file), name, token);
   if (kind === "mbtiles") {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    return finishMbtiles(bytes, name);
+    return finishMbtiles(await openMbtilesBytes(bytes), name);
   }
   if (kind === "vtpk") {
     return finishPackage(packageFromFile(file), name, token);
@@ -87,11 +89,8 @@ export async function loadRemote(
   }
   if (target.kind === "mbtiles") {
     const name = nameFromUrl(target.href);
-    onStatus?.(`Downloading ${name}…`);
-    const bytes = await download(target.href, signal, (size) => {
-      onStatus?.(`Downloading ${name} (${size})…`);
-    });
-    return finishMbtiles(bytes, name);
+    onStatus?.(`Opening ${name}…`);
+    return finishMbtiles(await openRemoteMbtiles(target.href, signal), name);
   }
   if (target.kind === "vtpk") {
     return finishPackage(new TilePackage(target.href), nameFromUrl(target.href), token);
@@ -253,8 +252,7 @@ async function probePmtiles(archive: PMTiles, header: Header): Promise<string[]>
   return [...ids];
 }
 
-async function finishMbtiles(bytes: Uint8Array, name: string): Promise<LoadedSource> {
-  const info = await openMbtilesBytes(bytes);
+async function finishMbtiles(info: MbtilesInfo, name: string): Promise<LoadedSource> {
   const source: TileSource = info.session.vector
     ? {
         type: "vector",
@@ -643,22 +641,6 @@ function parseJson(text: string): unknown {
   } catch {
     throw new Error("This JSON file could not be parsed.");
   }
-}
-
-async function download(
-  url: string,
-  signal: AbortSignal,
-  onSize?: (label: string) => void,
-): Promise<Uint8Array> {
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
-    throw new Error(`Could not download the file (HTTP ${response.status}).`);
-  }
-  const length = Number(response.headers.get("content-length"));
-  if (Number.isFinite(length) && length > 0) {
-    onSize?.(`${(length / (1024 * 1024)).toFixed(1)} MB`);
-  }
-  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function downloadJson(url: string, signal: AbortSignal): Promise<unknown> {
