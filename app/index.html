@@ -441,7 +441,19 @@
     }
 
     function getPackageBounds() {
+      // maplibre-tilepackage-protocol exposes the package extent as
+      // header.minLon/minLat/maxLon/maxLat. The values may be degrees even when
+      // header.spatialReference says 3857, so do not trust that field here;
+      // the range checks below tell degrees from Web Mercator metres.
+      const headerExtent = [
+        currentHeader?.minLon,
+        currentHeader?.minLat,
+        currentHeader?.maxLon,
+        currentHeader?.maxLat
+      ];
+
       const candidates = [
+        headerExtent,
         currentHeader?.initialExtent,
         currentHeader?.fullExtent,
         currentHeader?.extent,
@@ -540,6 +552,11 @@
       currentPackageStyle = structuredClone(currentOriginalStyle);
       map.setStyle(makeCompositeStyle(currentPackageStyle));
 
+      // Fit right away instead of waiting for "style.load": setStyle() may apply
+      // the change as a diff (the Esri background source/layer is shared with the
+      // previous style), in which case "style.load" is never emitted.
+      if (fit) fitToBounds();
+
       map.once("style.load", () => {
         if (!currentPackage || thisStyle !== styleSequence) return;
 
@@ -551,8 +568,6 @@
           `Loaded ${currentPackageName} — ` +
           `${currentPackageStyle.layers?.length || 0} style layers.`
         );
-
-        if (fit) fitToBounds();
       });
     }
 
@@ -603,7 +618,7 @@
         fitBoundsBtn.disabled = false;
         clearBtn.disabled = false;
 
-        setActiveStyle();
+        setActiveStyle({ fit: true });
       } catch (error) {
         if (thisLoad !== loadSequence) return;
 

@@ -1,0 +1,87 @@
+---
+import "../styles/viewer.css";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tiles viewer</title>
+  </head>
+  <body>
+    <header id="toolbar">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">V</span>
+        <h1>Tiles viewer</h1>
+      </div>
+      <label class="file-button" for="file">Local file</label>
+      <input
+        id="file"
+        type="file"
+        accept=".pmtiles,.mbtiles,.vtpk,.tpkx,.json,application/json"
+      />
+      <input
+        id="url"
+        type="text"
+        placeholder="Load tiles from URL"
+        aria-label="Load tiles from URL"
+        spellcheck="false"
+      />
+      <button id="open" type="button">Load URL</button>
+      <select id="example" aria-label="Examples">
+        <option value="">Examples</option>
+        <optgroup label="PMTiles">
+          <option value="https://latest.protomaps.com/v4.pmtiles">Protomaps v4</option>
+        </optgroup>
+        <optgroup label="TileJSON">
+          <option value="/imagery.json">Esri World Imagery</option>
+        </optgroup>
+        <optgroup label={"{z}/{x}/{y}"}>
+          <option value="https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}">
+            Versatiles
+          </option>
+          <option
+            value="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          >
+            Esri World Imagery
+          </option>
+        </optgroup>
+        <optgroup label="VTPK/TPKX">
+          <option value="https://data.source.coop/gishub/vtpk/leon.vtpk">leon.vtpk</option>
+          <option value="s3://us-west-2.opendata.source.coop/gishub/vtpk/sanfrancisco.tpkx">
+            sanfrancisco.tpkx
+          </option>
+        </optgroup>
+      </select>
+      <button id="fit" type="button" disabled>Fit bounds</button>
+      <button id="clear" type="button" disabled>Clear</button>
+      <label class="check" title="Show the background map">
+        <input id="background" type="checkbox" />
+        Background
+      </label>
+      <label class="check" title="Show tile boundaries">
+        <input id="tile-bounds" type="checkbox" />
+        Tile boundaries
+      </label>
+      <p id="status" role="status" aria-live="polite"></p>
+    </header>
+    <div id="stage">
+      <div id="map"></div>
+      <aside id="panel">
+        <div class="panel-head">
+          <h2>Layers</h2>
+          <button id="collapse" type="button" title="Collapse layers" aria-expanded="true">
+            −
+          </button>
+        </div>
+        <div id="summary"></div>
+        <div id="layers"></div>
+      </aside>
+    </div>
+    <div id="drop" hidden>Drop a tileset to open it</div>
+    <script>
+      import { startViewer } from "../scripts/viewer.ts";
+      startViewer();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "tilejson": "2.2.0",
+  "name": "Esri World Imagery",
+  "attribution": "Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+  "tiles": [
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+  ],
+  "minzoom": 0,
+  "maxzoom": 19,
+  "bounds": [-180, -85.0511, 180, 85.0511]
+}
