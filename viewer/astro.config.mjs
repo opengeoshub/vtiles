@@ -14,19 +14,9 @@ function scopeSqlJsModule() {
   };
 }
 
-const protomapsBasemapProxy = {
-  "/basemap/protomaps.pmtiles": {
-    target: "https://latest.protomaps.com",
-    changeOrigin: true,
-    rewrite: () => "/v4.pmtiles",
-  },
-};
-
 export default defineConfig({
   vite: {
     plugins: [scopeSqlJsModule()],
-    server: { proxy: protomapsBasemapProxy },
-    preview: { proxy: protomapsBasemapProxy },
     optimizeDeps: {
       include: [
         "sql.js",

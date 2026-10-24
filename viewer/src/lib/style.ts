@@ -180,11 +180,9 @@ function basemapParts(
   glyphs: StyleSpecification["glyphs"];
 } {
   const source = structuredClone(BACKGROUND_STYLE.sources?.[PROTOMAPS_SOURCE_ID]);
-  if (!source || source.type !== "vector") {
-    throw new Error("Background style is missing the protomaps source.");
+  if (!source || source.type !== "vector" || !source.url?.startsWith("pmtiles://")) {
+    throw new Error("Background style is missing a pmtiles:// source.");
   }
-  // latest.protomaps.com does not send CORS headers, so the archive is read through this app.
-  source.url = `pmtiles://${new URL("/basemap/protomaps.pmtiles", window.location.href).href}`;
   const layers = (BACKGROUND_STYLE.layers ?? [])
     .filter((layer) => symbols || layer.type !== "symbol")
     .map((layer) => {

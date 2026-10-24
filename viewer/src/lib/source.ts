@@ -362,27 +362,34 @@ async function finishTileJson(
   const attribution = attributionFrom(root);
   const bounds = boundsFromExtent(root.bounds);
   const tileSize = tileSizeFrom(root.tileSize);
-  const source: TileSource = vector
-    ? {
-        type: "vector",
-        tiles,
-        minzoom,
-        maxzoom,
-        scheme,
-        attribution,
-        ...(mlt ? { encoding: "mlt" as const } : {}),
-        ...(bounds ? { bounds } : {}),
-      }
-    : {
-        type: "raster",
-        tiles,
-        tileSize,
-        minzoom,
-        maxzoom,
-        scheme,
-        attribution,
-        ...(bounds ? { bounds } : {}),
-      };
+  const encoding = mlt || root.encoding === "mlt" ? ("mlt" as const) : undefined;
+  // A hosted TileJSON is a MapLibre source url. MapLibre fetches that document.
+  // https://maplibre.org/maplibre-gl-js/docs/examples/add-a-vector-tile-source/
+  const source: TileSource = base
+    ? vector
+      ? { type: "vector", url: base, ...(encoding ? { encoding } : {}) }
+      : { type: "raster", url: base, tileSize }
+    : vector
+      ? {
+          type: "vector",
+          tiles,
+          minzoom,
+          maxzoom,
+          scheme,
+          attribution,
+          ...(encoding ? { encoding } : {}),
+          ...(bounds ? { bounds } : {}),
+        }
+      : {
+          type: "raster",
+          tiles,
+          tileSize,
+          minzoom,
+          maxzoom,
+          scheme,
+          attribution,
+          ...(bounds ? { bounds } : {}),
+        };
   const jsonName = root.name;
   return blank({
     name: typeof jsonName === "string" && jsonName ? jsonName : name,
