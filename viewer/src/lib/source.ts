@@ -358,8 +358,11 @@ async function finishTileJson(
   let vector = hinted === "vector" || vectorLayers.length > 0 || mlt;
   if (hinted === "raster") vector = false;
   let note: string | undefined;
+  const addressed = tileAddress(tiles, root.scheme === "tms" ? "tms" : "xyz");
+  const scheme = addressed.scheme;
+  const mapTiles = addressed.tiles;
   if (vector && vectorLayers.length === 0 && !mlt && signal) {
-    const probed = await probeTemplate(first, signal);
+    const probed = await probeTemplate(mapTiles[0] ?? first, signal, scheme);
     if (probed?.vector) vectorLayers = probed.layers;
     else if (probed && !probed.vector) vector = false;
   }
@@ -372,21 +375,22 @@ async function finishTileJson(
   }
   const minzoom = clampZoom(root.minzoom, 0);
   const maxzoom = Math.max(minzoom, clampZoom(root.maxzoom, 22));
-  const scheme = root.scheme === "tms" ? "tms" : "xyz";
   const attribution = attributionFrom(root);
   const bounds = boundsFromExtent(root.bounds);
   const tileSize = tileSizeFrom(root.tileSize);
   const encoding = mlt || root.encoding === "mlt" ? ("mlt" as const) : undefined;
-  // A hosted TileJSON is a MapLibre source url. MapLibre fetches that document.
+  // A hosted TileJSON without {-y} is a MapLibre source url, so MapLibre reads
+  // scheme. {-y} flips that row again: TMS plus {-y} becomes XYZ.
   // https://maplibre.org/maplibre-gl-js/docs/examples/add-a-vector-tile-source/
-  const source: TileSource = base
+  const flipped = tiles.some((tile) => tile.includes("{-y}"));
+  const source: TileSource = base && !flipped
     ? vector
       ? { type: "vector", url: base, ...(encoding ? { encoding } : {}) }
       : { type: "raster", url: base, tileSize }
     : vector
       ? {
           type: "vector",
-          tiles,
+          tiles: mapTiles,
           minzoom,
           maxzoom,
           scheme,
@@ -396,7 +400,7 @@ async function finishTileJson(
         }
       : {
           type: "raster",
-          tiles,
+          tiles: mapTiles,
           tileSize,
           minzoom,
           maxzoom,
@@ -451,14 +455,23 @@ async function finishXyz(template: string, signal: AbortSignal): Promise<LoadedS
     throw new Error("No vector layers were found in a sample tile.");
   }
   const attribution = attributionFor(template);
+  const addressed = tileAddress([template], "xyz");
   const source: TileSource = vector
-    ? { type: "vector", tiles: [template], minzoom: 0, maxzoom: 22, attribution }
+    ? {
+        type: "vector",
+        tiles: addressed.tiles,
+        minzoom: 0,
+        maxzoom: 22,
+        scheme: addressed.scheme,
+        attribution,
+      }
     : {
         type: "raster",
-        tiles: [template],
+        tiles: addressed.tiles,
         tileSize: 256,
         minzoom: 0,
         maxzoom: 22,
+        scheme: addressed.scheme,
         attribution,
       };
   return blank({
@@ -600,6 +613,7 @@ function sourceLayersFromStyle(value: unknown): string[] {
 async function probeTemplate(
   template: string,
   signal: AbortSignal,
+  scheme: "xyz" | "tms" = "xyz",
 ): Promise<{ vector: boolean; layers: string[] } | null> {
   const samples: [number, number, number][] = [
     [0, 0, 0],
@@ -615,7 +629,7 @@ async function probeTemplate(
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     let response: Response;
     try {
-      response = await fetch(expandTemplate(template, z, x, y), { signal });
+      response = await fetch(expandTemplate(template, z, x, y, scheme), { signal });
     } catch (error) {
       if (isAbort(error)) throw error;
       continue;
@@ -634,12 +648,38 @@ async function probeTemplate(
   return sawImage ? { vector: false, layers: [] } : null;
 }
 
-function expandTemplate(template: string, z: number, x: number, y: number): string {
+function tileAddress(
+  tiles: string[],
+  scheme: "xyz" | "tms",
+): { tiles: string[]; scheme: "xyz" | "tms" } {
+  let flipped = false;
+  const next = tiles.map((tile) => {
+    if (!tile.includes("{-y}")) return tile;
+    if (/\{y\}/.test(tile)) {
+      throw new Error("A tile template can use {y} or {-y}, not both.");
+    }
+    flipped = true;
+    return tile.replaceAll("{-y}", "{y}");
+  });
+  // {-y} flips the row. It does not select TMS. Combined with scheme "tms",
+  // the two flips cancel and the request uses an XYZ row.
+  const nextScheme = flipped ? (scheme === "tms" ? "xyz" : "tms") : scheme;
+  return { tiles: next, scheme: nextScheme };
+}
+
+function expandTemplate(
+  template: string,
+  z: number,
+  x: number,
+  y: number,
+  scheme: "xyz" | "tms" = "xyz",
+): string {
   const flipped = 2 ** z - 1 - y;
+  const row = scheme === "tms" ? flipped : y;
   return template
     .replaceAll("{z}", String(z))
     .replaceAll("{x}", String(x))
-    .replaceAll("{y}", String(y))
+    .replaceAll("{y}", String(row))
     .replaceAll("{-y}", String(flipped));
 }
 
@@ -783,9 +823,10 @@ function boundsFromStyle(style: StyleSpecification): Bounds | null {
   return boundsFromExtent(metadata["mapbox:bounds"] ?? metadata.bounds);
 }
 
-function tileSizeFrom(value: unknown): 256 | 512 {
+function tileSizeFrom(value: unknown): 256 | 512 | 1024 {
   const number = typeof value === "number" ? value : Number(value);
-  return number === 512 ? 512 : 256;
+  if (number === 512 || number === 1024) return number;
+  return 256;
 }
 
 function parseJson(text: string): unknown {
