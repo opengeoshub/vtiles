@@ -309,6 +309,10 @@ select {
   font-size: 12px;
 }
 
+.maplibregl-popup-close-button {
+  color: #000;
+}
+
 .popup-card { max-height: 260px; overflow: auto; }
 
 .popup-title { font-weight: 700; }

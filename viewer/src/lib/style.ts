@@ -2,15 +2,14 @@ import type {
   LayerSpecification,
   StyleSpecification,
 } from "@maplibre/maplibre-gl-style-spec";
-import backgroundStyle from "../styles/protomaps-viewer.json";
 import type { LoadedSource } from "./source";
 
-// https://github.com/opengeoshub/vstyles/blob/main/protomaps/viewer.json
+export const BACKGROUND_STYLE_URL =
+  "https://raw.githubusercontent.com/opengeoshub/vstyles/main/protomaps/viewer.json";
 export const BASEMAP_LAYER_PREFIX = "viewer-basemap-";
 const BASEMAP_SOURCE_ID = "viewer-basemap";
 const PROTOMAPS_SOURCE_ID = "protomaps";
 const TILESET_SOURCE_ID = "tileset";
-const BACKGROUND_STYLE = backgroundStyle as StyleSpecification;
 
 const PALETTE = [
   "#e76f51",
@@ -41,7 +40,7 @@ export interface LayerToggle {
 
 export function buildViewerStyle(
   loaded: LoadedSource | null,
-  background: boolean,
+  background: StyleSpecification | null,
 ): { style: StyleSpecification; toggles: LayerToggle[] } {
   if (loaded?.packageStyle) {
     return packageStyle(loaded.packageStyle, background);
@@ -126,8 +125,8 @@ export function buildViewerStyle(
   return {
     style: {
       version: 8,
-      sprite: basemap.sprite,
-      glyphs: basemap.glyphs,
+      ...(basemap.sprite ? { sprite: basemap.sprite } : {}),
+      ...(basemap.glyphs ? { glyphs: basemap.glyphs } : {}),
       sources: {
         ...basemap.sources,
         ...(loaded?.source ? { [TILESET_SOURCE_ID]: loaded.source } : {}),
@@ -140,7 +139,7 @@ export function buildViewerStyle(
 
 function packageStyle(
   original: StyleSpecification,
-  background: boolean,
+  background: StyleSpecification | null,
 ): { style: StyleSpecification; toggles: LayerToggle[] } {
   const pkg = structuredClone(original);
   const packageLayers = (pkg.layers ?? []).filter(
@@ -157,12 +156,14 @@ function packageStyle(
     mapLayerIds: [layer.id],
     visible: layerVisible(layer),
   }));
+  const sprite = pkg.sprite ?? basemap.sprite;
+  const glyphs = pkg.glyphs ?? basemap.glyphs;
   return {
     style: {
       version: 8,
-      name: pkg.name,
-      sprite: pkg.sprite ?? basemap.sprite,
-      glyphs: pkg.glyphs ?? basemap.glyphs,
+      ...(pkg.name ? { name: pkg.name } : {}),
+      ...(sprite ? { sprite } : {}),
+      ...(glyphs ? { glyphs } : {}),
       sources: { ...basemap.sources, ...packageSources },
       layers: [...basemap.layers, ...packageLayers],
     },
@@ -171,7 +172,7 @@ function packageStyle(
 }
 
 function basemapParts(
-  visible: boolean,
+  background: StyleSpecification | null,
   symbols: boolean,
 ): {
   sources: StyleSpecification["sources"];
@@ -179,11 +180,14 @@ function basemapParts(
   sprite: StyleSpecification["sprite"];
   glyphs: StyleSpecification["glyphs"];
 } {
-  const source = structuredClone(BACKGROUND_STYLE.sources?.[PROTOMAPS_SOURCE_ID]);
+  if (!background) {
+    return { sources: {}, layers: [], sprite: undefined, glyphs: undefined };
+  }
+  const source = structuredClone(background.sources?.[PROTOMAPS_SOURCE_ID]);
   if (!source || source.type !== "vector" || !source.url?.startsWith("pmtiles://")) {
     throw new Error("Background style is missing a pmtiles:// source.");
   }
-  const layers = (BACKGROUND_STYLE.layers ?? [])
+  const layers = (background.layers ?? [])
     .filter((layer) => symbols || layer.type !== "symbol")
     .map((layer) => {
       const next = structuredClone(layer);
@@ -191,14 +195,14 @@ function basemapParts(
       if ("source" in next && next.source === PROTOMAPS_SOURCE_ID) {
         next.source = BASEMAP_SOURCE_ID;
       }
-      setVisibility(next, visible);
+      setVisibility(next, true);
       return next;
     });
   return {
     sources: { [BASEMAP_SOURCE_ID]: source },
     layers,
-    sprite: BACKGROUND_STYLE.sprite,
-    glyphs: BACKGROUND_STYLE.glyphs,
+    sprite: background.sprite,
+    glyphs: background.glyphs,
   };
 }
 

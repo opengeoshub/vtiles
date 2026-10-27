@@ -23,6 +23,7 @@ import {
   type LoadedSource,
 } from "../lib/source";
 import {
+  BACKGROUND_STYLE_URL,
   BASEMAP_LAYER_PREFIX,
   buildViewerStyle,
   type LayerToggle,
@@ -54,7 +55,7 @@ export function startViewer(): void {
 
   const map = new Map({
     container: mapElement,
-    style: buildViewerStyle(null, backgroundInput.checked).style,
+    style: buildViewerStyle(null, null).style,
     center: [0, 0],
     zoom: 1,
     maxZoom: 22,
@@ -73,6 +74,9 @@ export function startViewer(): void {
   let activePackage: string | null = null;
   let current: LoadedSource | null = null;
   let toggles: LayerToggle[] = [];
+  let backgroundStyle: StyleSpecification | null = null;
+  let backgroundRequest: Promise<StyleSpecification> | null = null;
+  let backgroundToken = 0;
 
   const setStatus = (message: string, isError = false) => {
     status.textContent = message;
@@ -185,7 +189,109 @@ export function startViewer(): void {
     history.replaceState(null, "", next);
   };
 
-  const show = async (loaded: LoadedSource, token: number, shareUrl: string | null) => {
+  const loadBackgroundStyle = () => {
+    if (backgroundStyle) return Promise.resolve(backgroundStyle);
+    if (!backgroundRequest) {
+      backgroundRequest = fetch(BACKGROUND_STYLE_URL)
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Background style failed to load (${response.status}).`);
+          }
+          const style = (await response.json()) as StyleSpecification;
+          if (!style || typeof style !== "object" || !Array.isArray(style.layers)) {
+            throw new Error("Background style is not a MapLibre style.");
+          }
+          backgroundStyle = style;
+          return style;
+        })
+        .finally(() => {
+          backgroundRequest = null;
+        });
+    }
+    return backgroundRequest;
+  };
+
+  const basemapVisible = (visible: boolean) => {
+    const visibility = visible ? "visible" : "none";
+    for (const layer of map.getStyle()?.layers ?? []) {
+      if (!layer.id.startsWith(BASEMAP_LAYER_PREFIX) || !map.getLayer(layer.id)) continue;
+      map.setLayoutProperty(layer.id, "visibility", visibility);
+    }
+  };
+
+  const applyBackground = async (token: number) => {
+    if (!backgroundInput.checked) {
+      basemapVisible(false);
+      return;
+    }
+    const layers = map.getStyle()?.layers ?? [];
+    if (layers.some((layer) => layer.id.startsWith(BASEMAP_LAYER_PREFIX))) {
+      basemapVisible(true);
+      return;
+    }
+    const previous = status.textContent ?? READY;
+    const previousError = status.classList.contains("error");
+    const seen = generation;
+    setStatus("Loading background…");
+    try {
+      const style = await loadBackgroundStyle();
+      if (token !== backgroundToken || !backgroundInput.checked || seen !== generation) {
+        if (status.textContent === "Loading background…") setStatus(previous, previousError);
+        return;
+      }
+      const camera = {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      };
+      const kept: Record<string, boolean> = {};
+      for (const toggle of toggles) kept[toggle.id] = toggle.visible;
+      const built = buildViewerStyle(current, style);
+      for (const toggle of built.toggles) {
+        const visible = kept[toggle.id];
+        if (visible !== undefined) toggle.visible = visible;
+      }
+      toggles = built.toggles;
+      renderPanel();
+      await replaceStyle(built.style);
+      if (token !== backgroundToken || seen !== generation) return;
+      map.showTileBoundaries = tileBoundsInput.checked;
+      map.jumpTo(camera);
+      for (const toggle of toggles) {
+        if (toggle.visible) continue;
+        for (const id of toggle.mapLayerIds) {
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+        }
+      }
+      if (status.textContent === "Loading background…") setStatus(previous, previousError);
+    } catch (error) {
+      if (token !== backgroundToken) return;
+      backgroundInput.checked = false;
+      setStatus(error instanceof Error ? error.message : String(error), true);
+    }
+  };
+
+  const show = async (
+    loaded: LoadedSource,
+    token: number,
+    shareUrl: string | null,
+    fit: boolean,
+  ) => {
+    if (token !== generation) {
+      discardLoaded(loaded, token);
+      return;
+    }
+    let background: StyleSpecification | null = null;
+    let backgroundError = "";
+    if (backgroundInput.checked) {
+      try {
+        background = await loadBackgroundStyle();
+      } catch (error) {
+        backgroundError = error instanceof Error ? error.message : String(error);
+        backgroundInput.checked = false;
+      }
+    }
     if (token !== generation) {
       discardLoaded(loaded, token);
       return;
@@ -200,7 +306,13 @@ export function startViewer(): void {
     activePmtiles = loaded.pmtilesKey;
     activePackage = loaded.packageKey;
     current = loaded;
-    const built = buildViewerStyle(loaded, backgroundInput.checked);
+    const camera = {
+      center: map.getCenter(),
+      zoom: map.getZoom(),
+      bearing: map.getBearing(),
+      pitch: map.getPitch(),
+    };
+    const built = buildViewerStyle(loaded, background);
     toggles = built.toggles;
     renderPanel();
     await replaceStyle(built.style);
@@ -209,13 +321,16 @@ export function startViewer(): void {
     const canFit = loaded.bounds !== null || loaded.center !== null;
     fitButton.disabled = !canFit;
     clearButton.disabled = false;
-    if (canFit) fitCurrent();
+    if (fit && canFit) fitCurrent();
+    else map.jumpTo(camera);
     const layers = loaded.vectorLayers.length
       ? ` · ${loaded.vectorLayers.length} ${loaded.packageStyle ? "style layers" : "layers"}`
       : "";
     const note = loaded.note ? ` ${loaded.note}` : "";
+    const backgroundNote = backgroundError ? ` ${backgroundError}` : "";
     setStatus(
-      `${loaded.name} · ${loaded.format} · ${loaded.vector ? "vector" : "raster"} · zoom ${loaded.minzoom}–${loaded.maxzoom}${layers}.${note}`,
+      `${loaded.name} · ${loaded.format} · ${loaded.vector ? "vector" : "raster"} · zoom ${loaded.minzoom}–${loaded.maxzoom}${layers}.${note}${backgroundNote}`,
+      backgroundError !== "",
     );
     rememberUrl(shareUrl);
   };
@@ -245,7 +360,7 @@ export function startViewer(): void {
     urlInput.value = "";
     try {
       const loaded = await loadFile(file, run.token);
-      await show(loaded, run.token, null);
+      await show(loaded, run.token, null, false);
     } catch (error) {
       fail(run.token, error);
     } finally {
@@ -254,7 +369,7 @@ export function startViewer(): void {
     }
   };
 
-  const openAddress = async (address: string) => {
+  const openAddress = async (address: string, fit = false) => {
     const trimmed = address.trim();
     if (!trimmed) {
       setStatus("Enter a URL.", true);
@@ -266,7 +381,7 @@ export function startViewer(): void {
     setStatus(`Opening ${trimmed}…`);
     try {
       const loaded = await loadRemote(trimmed, run.token, run.signal, setStatus);
-      await show(loaded, run.token, trimmed);
+      await show(loaded, run.token, trimmed, fit);
     } catch (error) {
       fail(run.token, error);
     } finally {
@@ -285,9 +400,11 @@ export function startViewer(): void {
     if (file) void openLocal(file);
   });
   exampleSelect.addEventListener("change", () => {
-    const value = exampleSelect.value;
+    const option = exampleSelect.selectedOptions[0];
+    const value = option?.value ?? "";
+    const fit = option?.hasAttribute("data-fit") ?? false;
     exampleSelect.value = "";
-    if (value) void openAddress(value);
+    if (value) void openAddress(value, fit);
   });
   fitButton.addEventListener("click", fitCurrent);
   clearButton.addEventListener("click", () => {
@@ -306,16 +423,15 @@ export function startViewer(): void {
     urlInput.value = "";
     rememberUrl(null);
     setStatus(READY);
-    void replaceStyle(buildViewerStyle(null, backgroundInput.checked).style).then(() => {
+    void replaceStyle(
+      buildViewerStyle(null, backgroundInput.checked ? backgroundStyle : null).style,
+    ).then(() => {
       if (run.token === generation) map.showTileBoundaries = tileBoundsInput.checked;
     });
   });
   backgroundInput.addEventListener("change", () => {
-    const visibility = backgroundInput.checked ? "visible" : "none";
-    for (const layer of map.getStyle()?.layers ?? []) {
-      if (!layer.id.startsWith(BASEMAP_LAYER_PREFIX) || !map.getLayer(layer.id)) continue;
-      map.setLayoutProperty(layer.id, "visibility", visibility);
-    }
+    backgroundToken += 1;
+    void applyBackground(backgroundToken);
   });
   tileBoundsInput.addEventListener("change", () => {
     map.showTileBoundaries = tileBoundsInput.checked;
