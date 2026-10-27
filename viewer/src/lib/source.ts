@@ -115,8 +115,12 @@ function kindFromName(name: string): "pmtiles" | "mbtiles" | "vtpk" | "tilejson"
   throw new Error("Open a .pmtiles, .mbtiles, .json, .vtpk, or .tpkx file.");
 }
 
+function decodeTileBraces(value: string): string {
+  return value.replace(/%7B/gi, "{").replace(/%7D/gi, "}");
+}
+
 function classifyRemote(input: string): { kind: string; href: string } {
-  const trimmed = input.trim();
+  const trimmed = decodeTileBraces(input.trim());
   if (!trimmed) throw new Error("Enter a URL.");
   const tileTemplate =
     trimmed.includes("{z}") &&
@@ -153,6 +157,13 @@ async function loadUnknown(
   token: number,
   signal: AbortSignal,
 ): Promise<LoadedSource> {
+  if (isArcgisVectorTileServiceUrl(href)) {
+    return finishArcgisVectorTileServer(
+      await downloadJson(arcgisJsonUrl(href), signal),
+      href,
+      signal,
+    );
+  }
   try {
     const archive = new PMTiles(href);
     await archive.getHeader();
@@ -162,6 +173,9 @@ async function loadUnknown(
   }
   try {
     const json = await downloadJson(href, signal);
+    if (looksLikeArcgisVectorTileServer(json)) {
+      return finishArcgisVectorTileServer(json, href, signal);
+    }
     if (looksLikeTileJson(json) || looksLikeStyle(json)) {
       return finishTileJson(json, nameFromUrl(href), href, signal);
     }
@@ -169,7 +183,7 @@ async function loadUnknown(
     if (isAbort(error)) throw error;
   }
   throw new Error(
-    "Could not tell what this URL is. Use a .pmtiles, .mbtiles, .json, .vtpk, .tpkx link, or a template with {z}, {x}, and {y}.",
+    "Could not tell what this URL is. Use a .pmtiles, .mbtiles, .json, .vtpk, .tpkx link, or an XYZ template.",
   );
 }
 
@@ -416,15 +430,21 @@ async function finishXyz(template: string, signal: AbortSignal): Promise<LoadedS
   let vectorLayers: string[] = [];
   let note: string | undefined;
   if (vector || hinted === "unknown") {
-    const probed = await probeTemplate(template, signal);
-    if (probed?.vector) {
+    const catalog = await arcgisVectorLayers(template, signal);
+    if (catalog) {
       vector = true;
-      vectorLayers = probed.layers;
-    } else if (probed && !probed.vector) {
-      vector = false;
-    } else if (hinted === "unknown") {
-      vector = false;
-      note = "Sample tiles did not identify the format, so this URL is shown as raster.";
+      vectorLayers = catalog;
+    } else {
+      const probed = await probeTemplate(template, signal);
+      if (probed?.vector) {
+        vector = true;
+        vectorLayers = probed.layers;
+      } else if (probed && !probed.vector) {
+        vector = false;
+      } else if (hinted === "unknown") {
+        vector = false;
+        note = "Sample tiles did not identify the format, so this URL is shown as raster.";
+      }
     }
   }
   if (vector && vectorLayers.length === 0) {
@@ -454,6 +474,129 @@ async function finishXyz(template: string, signal: AbortSignal): Promise<LoadedS
   });
 }
 
+async function finishArcgisVectorTileServer(
+  value: unknown,
+  serviceUrl: string,
+  signal: AbortSignal,
+): Promise<LoadedSource> {
+  const root = record(value);
+  if (!root || !looksLikeArcgisVectorTileServer(root)) {
+    throw new Error("This ArcGIS vector tile service could not be read.");
+  }
+  const templates = Array.isArray(root.tiles)
+    ? root.tiles.filter((tile): tile is string => typeof tile === "string")
+    : [];
+  if (!templates.length) {
+    throw new Error("This ArcGIS vector tile service has no tiles.");
+  }
+  const directory = serviceDirectory(serviceUrl);
+  const relative = templates[0] ?? "";
+  // Keep {z}, {x}, and {y} literal. URL resolution encodes the braces.
+  const template = /^[a-z][a-z0-9+.-]*:\/\//i.test(relative)
+    ? relative
+    : `${directory}${relative.replace(/^\/+/, "")}`;
+  const minzoom = clampZoom(root.minLOD ?? root.minzoom, 0);
+  const maxzoom = Math.max(minzoom, clampZoom(root.maxLOD ?? root.maxzoom, 22));
+  const catalog = await arcgisVectorLayers(template, signal);
+  let vectorLayers = catalog ?? [];
+  if (!vectorLayers.length) {
+    const probed = await probeTemplate(template, signal);
+    if (probed?.vector) vectorLayers = probed.layers;
+  }
+  if (!vectorLayers.length) {
+    throw new Error("No vector layers were found in this ArcGIS vector tile service.");
+  }
+  const bounds = boundsFromExtent(root.fullExtent ?? root.initialExtent);
+  const copyright = root.copyrightText;
+  const attribution =
+    typeof copyright === "string" && copyright ? copyright : attributionFrom(root);
+  const serviceName = root.name;
+  return blank({
+    name:
+      typeof serviceName === "string" && serviceName
+        ? serviceName
+        : nameFromUrl(serviceUrl),
+    format: "XYZ",
+    vector: true,
+    bounds,
+    minzoom,
+    maxzoom,
+    vectorLayers,
+    attribution,
+    source: {
+      type: "vector",
+      tiles: [template],
+      minzoom,
+      maxzoom,
+      attribution,
+      ...(bounds ? { bounds } : {}),
+    },
+  });
+}
+
+function isArcgisVectorTileServiceUrl(href: string): boolean {
+  try {
+    return /\/vectortileserver\/?$/i.test(new URL(href).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function arcgisJsonUrl(href: string): string {
+  const url = new URL(href);
+  if (!url.searchParams.has("f")) url.searchParams.set("f", "json");
+  return url.href;
+}
+
+function serviceDirectory(href: string): string {
+  const url = new URL(href);
+  const path = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+  return `${url.origin}${path}`;
+}
+
+function looksLikeArcgisVectorTileServer(value: unknown): boolean {
+  const root = record(value);
+  if (!root || root.tilejson || !Array.isArray(root.tiles)) return false;
+  const tileInfo = record(root.tileInfo);
+  return root.type === "indexedVector" || tileInfo?.format === "pbf";
+}
+
+async function arcgisVectorLayers(
+  template: string,
+  signal: AbortSignal,
+): Promise<string[] | null> {
+  const service = arcgisVectorTileService(template);
+  if (!service) return null;
+  try {
+    const style = await downloadJson(`${service}/resources/styles/root.json`, signal);
+    const layers = sourceLayersFromStyle(style);
+    return layers.length ? layers : null;
+  } catch (error) {
+    if (isAbort(error)) throw error;
+    return null;
+  }
+}
+
+function arcgisVectorTileService(template: string): string | null {
+  const path = template.split(/[?#]/)[0] ?? "";
+  const marker = "/vectortileserver/tile/";
+  const index = path.toLowerCase().indexOf(marker);
+  if (index < 0) return null;
+  if (!/\{z\}/i.test(path) || !/\{x\}/i.test(path) || !/\{y\}/i.test(path)) return null;
+  return path.slice(0, index + "/VectorTileServer".length);
+}
+
+function sourceLayersFromStyle(value: unknown): string[] {
+  const layers = record(value)?.layers;
+  if (!Array.isArray(layers)) return [];
+  const ids: string[] = [];
+  for (const item of layers) {
+    const name = record(item)?.["source-layer"];
+    if (typeof name === "string" && name && !ids.includes(name)) ids.push(name);
+  }
+  return ids;
+}
+
 async function probeTemplate(
   template: string,
   signal: AbortSignal,
@@ -466,6 +609,7 @@ async function probeTemplate(
     [4, 8, 5],
     [5, 16, 10],
   ];
+  const layers: string[] = [];
   let sawImage = false;
   for (const [z, x, y] of samples) {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -482,9 +626,11 @@ async function probeTemplate(
       sawImage = true;
       continue;
     }
-    const layers = await vectorLayerIds(bytes);
-    if (layers.length) return { vector: true, layers };
+    for (const name of await vectorLayerIds(bytes)) {
+      if (!layers.includes(name)) layers.push(name);
+    }
   }
+  if (layers.length) return { vector: true, layers };
   return sawImage ? { vector: false, layers: [] } : null;
 }
 

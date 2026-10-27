@@ -29,7 +29,7 @@ import {
 } from "../lib/style";
 
 const READY =
-  "Open a PMTiles, MBTiles, TileJSON, {z}/{x}/{y}, or VTPK/TPKX.";
+  "Open a PMTiles, MBTiles, TileJSON, XYZ, or VTPK/TPKX.";
 
 export function startViewer(): void {
   config.WORKER_URL = maplibreWorkerUrl;
@@ -42,6 +42,7 @@ export function startViewer(): void {
   const exampleSelect = required<HTMLSelectElement>("example");
   const fitButton = required<HTMLButtonElement>("fit");
   const clearButton = required<HTMLButtonElement>("clear");
+  const themeButton = required<HTMLButtonElement>("theme");
   const backgroundInput = required<HTMLInputElement>("background");
   const tileBoundsInput = required<HTMLInputElement>("tile-bounds");
   const status = required<HTMLElement>("status");
@@ -64,6 +65,7 @@ export function startViewer(): void {
   map.addControl(new NavigationControl(), "top-right");
   map.addControl(new GlobeControl(), "top-right");
   map.addControl(new ZoomLevelControl(), "top-right");
+  bindTheme(themeButton);
 
   let generation = 0;
   let currentAbort: AbortController | null = null;
@@ -460,6 +462,25 @@ class ZoomLevelControl implements IControl {
     this.map = null;
     this.label = null;
   }
+}
+
+function bindTheme(button: HTMLButtonElement): void {
+  const apply = (theme: "light" | "dark") => {
+    if (theme === "light") document.documentElement.dataset.theme = "light";
+    else delete document.documentElement.dataset.theme;
+    const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    try {
+      localStorage.setItem("vtiles-theme", theme);
+    } catch {
+      // Storage can be blocked. The choice still applies for this visit.
+    }
+  };
+  apply(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  button.addEventListener("click", () => {
+    apply(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+  });
 }
 
 function required<T extends HTMLElement>(id: string): T {

@@ -8,6 +8,32 @@
   --muted: #9aa3ad;
   --accent: #65a9ff;
   --danger: #ff8d8d;
+  --control: #2c3136;
+  --control-border: #505860;
+  --control-hover: #3a4046;
+  --panel-bg: rgba(25, 28, 31, 0.94);
+  --mark-bg: #24384d;
+  --mark-border: #466b91;
+  --mark-text: #a8d1ff;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f4;
+  --border: #d5dbe1;
+  --text: #1c2127;
+  --muted: #5c6770;
+  --accent: #1a73e8;
+  --danger: #b42318;
+  --control: #ffffff;
+  --control-border: #c5ced6;
+  --control-hover: #e8eef3;
+  --panel-bg: rgba(255, 255, 255, 0.96);
+  --mark-bg: #e7f1fb;
+  --mark-border: #9ec3e6;
+  --mark-text: #1a5f9e;
 }
 
 * { box-sizing: border-box; }
@@ -55,10 +81,10 @@ body {
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 1px solid #466b91;
+  border: 1px solid var(--mark-border);
   border-radius: 7px;
-  background: #24384d;
-  color: #a8d1ff;
+  background: var(--mark-bg);
+  color: var(--mark-text);
   font-weight: 700;
 }
 
@@ -71,17 +97,19 @@ body {
 .file-button,
 #toolbar button,
 #collapse,
+.icon-button,
 select,
 input[type="text"] {
   min-height: 32px;
-  border: 1px solid #505860;
+  border: 1px solid var(--control-border);
   border-radius: 6px;
-  background: #2c3136;
+  background: var(--control);
 }
 
 .file-button,
 #toolbar button,
-#collapse {
+#collapse,
+.icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -89,10 +117,27 @@ input[type="text"] {
   cursor: pointer;
 }
 
+#toolbar button.icon-button,
+a.icon-button {
+  width: 32px;
+  padding: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.icon-button svg { display: block; }
+
+.icon-button .icon-sun { display: none; }
+
+:root[data-theme="light"] .icon-button .icon-sun { display: block; }
+
+:root[data-theme="light"] .icon-button .icon-moon { display: none; }
+
 #toolbar button:hover:not(:disabled),
 #collapse:hover:not(:disabled),
-.file-button:hover {
-  background: #3a4046;
+.file-button:hover,
+.icon-button:hover {
+  background: var(--control-hover);
 }
 
 #toolbar button:disabled,
@@ -119,16 +164,6 @@ select {
   padding: 0 8px;
   max-width: 220px;
 }
-
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.check input { accent-color: var(--accent); }
 
 #status {
   flex: 1 1 100%;
@@ -159,12 +194,25 @@ select {
   max-height: calc(100% - 24px);
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(25, 28, 31, 0.94);
+  background: var(--panel-bg);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
+#panel.collapsed #panel-options,
 #panel.collapsed #summary,
 #panel.collapsed #layers { display: none; }
+
+#panel-options {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 4px 8px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+#panel-options .layer { flex: 1 1 auto; }
+
+#panel-options input { accent-color: var(--accent); }
 
 .panel-head {
   display: flex;
